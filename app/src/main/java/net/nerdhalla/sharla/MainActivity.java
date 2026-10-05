@@ -1060,8 +1060,6 @@ public class MainActivity extends Activity {
         return minutes + "m";
     }
 
-    private View botHealthCard
-
     private View botHealthCard(String name, JSONObject d, boolean sharla) {
         if (d == null) d = new JSONObject();
         LinearLayout box = cardInner();
