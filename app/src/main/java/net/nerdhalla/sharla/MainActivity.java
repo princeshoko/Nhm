@@ -448,7 +448,7 @@ public class MainActivity extends Activity {
         View page;
         switch (currentMySection) {
             case "homeworlds":
-                page = renderHomeworldsPage();
+                page = renderHomeworldsAdminPage();
                 break;
             case "inventory":
                 page = renderInventoryPage();
@@ -1298,7 +1298,7 @@ public class MainActivity extends Activity {
         return String.format(Locale.US, "%.1f GB", value);
     }
 
-    private View renderHomeworldsPage() {
+    private View renderHomeworldsAdminPage() {
         LinearLayout c = scrollColumn();
         c.addView(pageHeading("Homeworlds Admin",
                 "Live Head Pool bridge for MySQL/state health, active games, matchmaking, force-stop controls, and owner stats tools."));
