@@ -639,9 +639,25 @@ public class MainActivity extends Activity {
         addField(controls, "Sort by", sort);
         c.addView(controls, cardParams());
 
+        ScrollView inventoryScroll = new ScrollView(this);
+        inventoryScroll.setFillViewport(false);
+        inventoryScroll.setVerticalScrollBarEnabled(true);
+        inventoryScroll.setNestedScrollingEnabled(true);
+        inventoryScroll.setBackground(roundRect(PANEL, 14, LINE, 1));
+
         LinearLayout itemList = new LinearLayout(this);
         itemList.setOrientation(LinearLayout.VERTICAL);
-        c.addView(itemList);
+        itemList.setPadding(dp(4), dp(4), dp(4), dp(4));
+        inventoryScroll.addView(itemList, new ScrollView.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT));
+
+        LinearLayout.LayoutParams inventoryWindow = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, dp(600));
+        inventoryWindow.leftMargin = dp(14);
+        inventoryWindow.rightMargin = dp(14);
+        inventoryWindow.bottomMargin = dp(18);
+        c.addView(inventoryScroll, inventoryWindow);
 
         Runnable refresh = () -> renderInventoryItems(
                 itemList,
@@ -903,7 +919,6 @@ public class MainActivity extends Activity {
         addAdminTab(row, "members", "👤 Members", hasPerm("member_lookup"));
         addAdminTab(row, "settings", "⚙ Settings", hasPerm("server_settings"));
         addAdminTab(row, "announce", "📣 Announce", hasPerm("announcements") || hasPerm("scheduled_announcements"));
-        addAdminTab(row, "schedules", "🕒 Schedules", hasPerm("scheduled_announcements"));
 
         scroller.addView(row);
         return scroller;
