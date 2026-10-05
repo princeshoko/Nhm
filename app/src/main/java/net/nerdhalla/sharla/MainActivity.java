@@ -4,6 +4,8 @@ import android.app.Activity;
 import android.app.AlertDialog;
 import android.app.DatePickerDialog;
 import android.app.TimePickerDialog;
+import android.content.Intent;
+import android.net.Uri;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
 import android.graphics.Color;
@@ -17,10 +19,6 @@ import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
 import android.webkit.CookieManager;
-import android.webkit.WebResourceRequest;
-import android.webkit.WebSettings;
-import android.webkit.WebView;
-import android.webkit.WebViewClient;
 import android.widget.ArrayAdapter;
 import android.widget.Button;
 import android.widget.EditText;
@@ -54,7 +52,7 @@ import java.util.concurrent.Executors;
 
 public class MainActivity extends Activity {
     private static final String BASE = "https://nerdhalla.net/";
-    private static final String LOGIN = BASE + "discord-login.php?return=%2Faccount.html";
+    private static final String MOBILE_LOGIN = BASE + "mobile-login.php";
 
     private static final int BG = Color.rgb(11, 8, 17);
     private static final int BG2 = Color.rgb(18, 12, 28);
@@ -79,7 +77,6 @@ public class MainActivity extends Activity {
     private TextView titleText;
     private TextView myNav;
     private TextView adminNav;
-    private WebView loginWeb;
 
     private JSONObject session;
     private JSONObject meData;
@@ -105,7 +102,59 @@ public class MainActivity extends Activity {
         setContentView(root);
 
         showStartup();
-        checkSession();
+        if (!handleAuthIntent(getIntent())) {
+            checkSession();
+        }
+    }
+
+    @Override
+    protected void onNewIntent(Intent intent) {
+        super.onNewIntent(intent);
+        setIntent(intent);
+        if (!handleAuthIntent(intent)) {
+            checkSession();
+        }
+    }
+
+    private boolean handleAuthIntent(Intent intent) {
+        if (intent == null || intent.getData() == null) return false;
+        Uri data = intent.getData();
+        if (!"nerdhallasharla".equalsIgnoreCase(data.getScheme()) ||
+                !"auth".equalsIgnoreCase(data.getHost())) {
+            return false;
+        }
+        String code = data.getQueryParameter("code");
+        if (code == null || code.trim().isEmpty()) {
+            showLogin();
+            toast("Nerdhalla login did not return a handoff code.");
+            return true;
+        }
+        intent.setData(null);
+        showStartup();
+        exchangeMobileLogin(code.trim());
+        return true;
+    }
+
+    private void exchangeMobileLogin(String code) {
+        io.execute(() -> {
+            try {
+                api.exchangeMobileAuth(code);
+                JSONObject s = api.getSession();
+                if (!s.optBoolean("logged_in", false)) {
+                    throw new Exception("Nerdhalla did not create an app session.");
+                }
+                main.post(() -> {
+                    session = s;
+                    api.setCsrfToken(s.optString("csrf_token", ""));
+                    showNativeApp();
+                });
+            } catch (Exception e) {
+                main.post(() -> {
+                    showLogin();
+                    toast("Login handoff failed: " + e.getMessage());
+                });
+            }
+        });
     }
 
     private void showStartup() {
@@ -168,57 +217,54 @@ public class MainActivity extends Activity {
 
         LinearLayout shell = new LinearLayout(this);
         shell.setOrientation(LinearLayout.VERTICAL);
+        shell.setGravity(Gravity.CENTER);
+        shell.setPadding(dp(26), dp(26), dp(26), dp(26));
         shell.setBackgroundColor(BG);
-
-        LinearLayout brand = new LinearLayout(this);
-        brand.setGravity(Gravity.CENTER_VERTICAL);
-        brand.setPadding(dp(16), dp(12), dp(16), dp(12));
-        brand.setBackgroundColor(BG2);
 
         ImageView logo = new ImageView(this);
         logo.setImageResource(R.drawable.nerdhalla_icon);
         logo.setScaleType(ImageView.ScaleType.CENTER_CROP);
-        brand.addView(logo, new LinearLayout.LayoutParams(dp(46), dp(46)));
+        shell.addView(logo, new LinearLayout.LayoutParams(dp(104), dp(104)));
 
-        LinearLayout labels = new LinearLayout(this);
-        labels.setOrientation(LinearLayout.VERTICAL);
-        labels.setPadding(dp(12), 0, 0, 0);
-        labels.addView(text("NERDHALLA", 18, TEXT, true));
-        labels.addView(text("Sign in with Discord", 13, MUTED, false));
-        brand.addView(labels, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+        TextView brand = text("NERDHALLA", 25, TEXT, true);
+        brand.setGravity(Gravity.CENTER);
+        brand.setPadding(0, dp(20), 0, dp(6));
         shell.addView(brand);
 
-        TextView note = text("Discord login is the only browser screen. After sign-in, the dashboard switches to the native app.", 13, MUTED, false);
-        note.setPadding(dp(16), dp(10), dp(16), dp(10));
+        TextView heading = text("Sign in to Sharla", 19, TEXT, true);
+        heading.setGravity(Gravity.CENTER);
+        shell.addView(heading);
+
+        TextView note = text(
+                "Discord login opens in your browser. When it is complete, Nerdhalla Sharla will reopen automatically and load the native dashboard.",
+                14, MUTED, false);
+        note.setGravity(Gravity.CENTER);
+        note.setPadding(dp(8), dp(10), dp(8), dp(20));
         shell.addView(note);
 
-        loginWeb = new WebView(this);
-        loginWeb.setBackgroundColor(BG);
-        WebSettings ws = loginWeb.getSettings();
-        ws.setJavaScriptEnabled(true);
-        ws.setDomStorageEnabled(true);
-        ws.setDatabaseEnabled(true);
-        CookieManager.getInstance().setAcceptThirdPartyCookies(loginWeb, true);
+        Button login = primaryButton("Login with Discord");
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, dp(52));
+        lp.setMargins(dp(8), dp(8), dp(8), dp(8));
+        shell.addView(login, lp);
 
-        loginWeb.setWebViewClient(new WebViewClient() {
-            @Override
-            public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
-                return false;
-            }
+        TextView status = text("No web page will be shown inside the app.", 12, MUTED, false);
+        status.setGravity(Gravity.CENTER);
+        status.setPadding(0, dp(8), 0, 0);
+        shell.addView(status);
 
-            @Override
-            public void onPageFinished(WebView view, String url) {
-                if (url != null && url.contains("nerdhalla.net")) {
-                    checkSession();
-                }
+        login.setOnClickListener(v -> {
+            try {
+                Intent browser = new Intent(Intent.ACTION_VIEW, Uri.parse(MOBILE_LOGIN));
+                browser.addCategory(Intent.CATEGORY_BROWSABLE);
+                startActivity(browser);
+                status.setText("Finish the Discord login in your browser. The app will reopen automatically.");
+            } catch (Exception e) {
+                toast("Could not open your browser.");
             }
         });
 
-        shell.addView(loginWeb, new LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f));
-
         root.addView(shell, match());
-        loginWeb.loadUrl(LOGIN);
     }
 
     private void showNativeApp() {
@@ -1648,7 +1694,6 @@ public class MainActivity extends Activity {
 
     @Override
     protected void onDestroy() {
-        if (loginWeb != null) loginWeb.destroy();
         io.shutdownNow();
         super.onDestroy();
     }
