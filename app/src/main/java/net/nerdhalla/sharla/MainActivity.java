@@ -448,7 +448,7 @@ public class MainActivity extends Activity {
         View page;
         switch (currentMySection) {
             case "homeworlds":
-                page = renderHomeworldsAdminPage();
+                page = renderHomeworldsPage();
                 break;
             case "inventory":
                 page = renderInventoryPage();
@@ -879,7 +879,7 @@ public class MainActivity extends Activity {
                 page = renderAnnouncementPage();
                 break;
             case "homeworlds":
-                page = renderHomeworldsPage();
+                page = renderHomeworldsAdminPage();
                 break;
             case "moderators":
                 page = renderModeratorAccessPage();
