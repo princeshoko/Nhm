@@ -1,0 +1,25 @@
+plugins {
+    id 'com.android.application'
+}
+
+android {
+    namespace 'net.nerdhalla.sharla'
+    compileSdk 35
+
+    defaultConfig {
+        applicationId 'net.nerdhalla.sharla'
+        minSdk 26
+        targetSdk 35
+        versionCode 101
+        versionName '1.0.1'
+    }
+
+    buildTypes {
+        debug {
+            minifyEnabled false
+        }
+        release {
+            minifyEnabled false
+        }
+    }
+}
