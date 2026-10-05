@@ -1,0 +1,10 @@
+<resources>
+    <style name="Theme.Nerdhalla" parent="android:style/Theme.Material.NoActionBar">
+        <item name="android:fontFamily">sans</item>
+        <item name="android:navigationBarColor">@color/nerdhalla_bg</item>
+        <item name="android:statusBarColor">@color/nerdhalla_bg</item>
+        <item name="android:windowLightStatusBar">false</item>
+        <item name="android:colorAccent">@color/nerdhalla_purple</item>
+        <item name="android:windowBackground">@color/nerdhalla_bg</item>
+    </style>
+</resources>
