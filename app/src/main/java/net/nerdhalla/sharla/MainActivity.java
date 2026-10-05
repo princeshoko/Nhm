@@ -91,6 +91,14 @@ public class MainActivity extends Activity {
     private long scheduleAtMillis = 0;
     private boolean authCheckRunning = false;
 
+    private String selectedMemberId = "";
+    private String selectedMemberName = "";
+    private TextView memberModerationSelected;
+    private EditText memberModerationReason;
+    private Spinner memberTimeoutSpinner;
+    private Spinner memberRoleSpinner;
+    private List<JSONObject> memberRoleObjects = new ArrayList<>();
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -259,7 +267,7 @@ public class MainActivity extends Activity {
         shell.addView(heading);
 
         TextView note = text(
-                "Discord login opens in your browser. When it is complete, Nerdhalla Sharla will reopen automatically and load the native dashboard.",
+                "Discord login opens in your browser. When it is complete, Nerdhalla will reopen automatically and load the native dashboard.",
                 14, MUTED, false);
         note.setGravity(Gravity.CENTER);
         note.setPadding(dp(8), dp(10), dp(8), dp(20));
@@ -593,7 +601,7 @@ public class MainActivity extends Activity {
 
     private View renderInventoryPage() {
         LinearLayout c = scrollColumn();
-        c.addView(pageHeading("Inventory", "Native inventory browser and pawn controls."));
+        c.addView(pageHeading("Inventory", "Browse, filter, sort, and pawn your Sharla collection."));
 
         JSONObject stats = meData.optJSONObject("stats");
         if (stats == null) stats = new JSONObject();
@@ -618,48 +626,115 @@ public class MainActivity extends Activity {
                 })));
         c.addView(summary, cardParams());
 
-        JSONArray arr = meData.optJSONArray("inventory");
-        List<JSONObject> items = jsonList(arr);
-        Collections.sort(items, Comparator.comparing(a -> a.optString("name", "").toLowerCase(Locale.US)));
+        final List<JSONObject> items = jsonList(meData.optJSONArray("inventory"));
 
-        if (items.isEmpty()) {
-            c.addView(infoCard("Inventory", "Your inventory is empty."));
-        } else {
-            for (JSONObject item : items) {
-                LinearLayout itemCard = card();
-                String rarity = item.optString("rarity", "Unknown");
-                TextView name = text(item.optString("name", "Item"), 17, rarityColor(rarity), true);
-                itemCard.addView(name);
-                itemCard.addView(text(rarity + "  •  ×" + item.optInt("quantity", 0) +
-                        "  •  " + tokenValue(rarity) + " 🪙 each", 13, MUTED, false));
-                String desc = item.optString("description", "");
-                if (!desc.isEmpty()) {
-                    TextView d = text(desc, 13, MUTED, false);
-                    d.setPadding(0, dp(8), 0, 0);
-                    itemCard.addView(d);
-                }
-                Button sell = secondaryButton("Sell 1  +" + tokenValue(rarity) + " 🪙");
-                itemCard.addView(sell, buttonParams());
-                sell.setOnClickListener(v -> {
-                    JSONObject body = new JSONObject();
-                    try {
-                        body.put("item", item.optString("name", ""));
-                        body.put("rarity", rarity);
-                    } catch (Exception ignored) {}
-                    String warning = item.optInt("quantity", 0) <= 1 ? "\n\nThis is your last copy." : "";
-                    confirm("Sell item?", "Sell one " + item.optString("name", "item") + " for " +
-                            tokenValue(rarity) + " Horse Tokens?" + warning, () ->
-                            post("sell_duplicates", body, result -> {
-                                toast("Item sold.");
-                                meData = null;
-                                loadMySharla();
-                            }));
-                });
-                c.addView(itemCard, cardParams());
+        LinearLayout controls = card();
+        controls.addView(sectionTitle("Inventory view"));
+        Spinner rarity = darkSpinner(list(
+                "All rarities", "Mythic", "Legendary", "Rare", "Uncommon", "Common"));
+        addField(controls, "Rarity", rarity);
+
+        Spinner sort = darkSpinner(list(
+                "Name A–Z", "Quantity high–low", "Rarity high–low"));
+        addField(controls, "Sort by", sort);
+        c.addView(controls, cardParams());
+
+        LinearLayout itemList = new LinearLayout(this);
+        itemList.setOrientation(LinearLayout.VERTICAL);
+        c.addView(itemList);
+
+        Runnable refresh = () -> renderInventoryItems(
+                itemList,
+                items,
+                String.valueOf(rarity.getSelectedItem()),
+                String.valueOf(sort.getSelectedItem()));
+
+        rarity.setOnItemSelectedListener(new SimpleItemSelectedListener(position -> refresh.run()));
+        sort.setOnItemSelectedListener(new SimpleItemSelectedListener(position -> refresh.run()));
+        refresh.run();
+
+        return wrapScroll(c);
+    }
+
+    private void renderInventoryItems(LinearLayout parent, List<JSONObject> source, String rarityFilter, String sortMode) {
+        parent.removeAllViews();
+
+        List<JSONObject> items = new ArrayList<>();
+        for (JSONObject item : source) {
+            if ("All rarities".equals(rarityFilter) ||
+                    rarityFilter.equals(item.optString("rarity", "Unknown"))) {
+                items.add(item);
             }
         }
 
-        return wrapScroll(c);
+        if ("Quantity high–low".equals(sortMode)) {
+            items.sort((a, b) -> Integer.compare(
+                    b.optInt("quantity", 0), a.optInt("quantity", 0)));
+        } else if ("Rarity high–low".equals(sortMode)) {
+            items.sort((a, b) -> {
+                int byRarity = Integer.compare(
+                        rarityRank(b.optString("rarity", "")),
+                        rarityRank(a.optString("rarity", "")));
+                if (byRarity != 0) return byRarity;
+                return a.optString("name", "").compareToIgnoreCase(b.optString("name", ""));
+            });
+        } else {
+            items.sort(Comparator.comparing(
+                    a -> a.optString("name", "").toLowerCase(Locale.US)));
+        }
+
+        if (items.isEmpty()) {
+            parent.addView(infoCard("Inventory", source.isEmpty()
+                    ? "Your inventory is empty."
+                    : "No inventory items match that rarity."));
+            return;
+        }
+
+        for (JSONObject item : items) {
+            LinearLayout itemCard = card();
+            String rarity = item.optString("rarity", "Unknown");
+            TextView name = text(item.optString("name", "Item"), 17, rarityColor(rarity), true);
+            itemCard.addView(name);
+            itemCard.addView(text(rarity + "  •  ×" + item.optInt("quantity", 0) +
+                    "  •  " + tokenValue(rarity) + " 🪙 each", 13, MUTED, false));
+
+            String desc = item.optString("description", "");
+            if (!desc.isEmpty()) {
+                TextView d = text(desc, 13, MUTED, false);
+                d.setPadding(0, dp(8), 0, 0);
+                itemCard.addView(d);
+            }
+
+            Button sell = secondaryButton("Sell 1  +" + tokenValue(rarity) + " 🪙");
+            itemCard.addView(sell, buttonParams());
+            sell.setOnClickListener(v -> {
+                JSONObject body = new JSONObject();
+                try {
+                    body.put("item", item.optString("name", ""));
+                    body.put("rarity", rarity);
+                } catch (Exception ignored) {}
+                String warning = item.optInt("quantity", 0) <= 1 ? "\n\nThis is your last copy." : "";
+                confirm("Sell item?", "Sell one " + item.optString("name", "item") + " for " +
+                        tokenValue(rarity) + " Horse Tokens?" + warning, () ->
+                        post("sell_duplicates", body, result -> {
+                            toast("Item sold.");
+                            meData = null;
+                            loadMySharla();
+                        }));
+            });
+            parent.addView(itemCard, cardParams());
+        }
+    }
+
+    private int rarityRank(String rarity) {
+        switch (rarity) {
+            case "Mythic": return 5;
+            case "Legendary": return 4;
+            case "Rare": return 3;
+            case "Uncommon": return 2;
+            case "Common": return 1;
+            default: return 0;
+        }
     }
 
     private View renderAchievementsPage() {
@@ -857,33 +932,135 @@ public class MainActivity extends Activity {
 
     private View renderHealthPage() {
         LinearLayout c = scrollColumn();
-        c.addView(pageHeading("Live Bot Health", "Live Sharla and Head Pool status."));
+        c.addView(pageHeading("Live Bot Health", "Live Sharla, Head Pool, and website heartbeat status."));
+
         LinearLayout holder = card();
         holder.addView(text("Checking…", 14, MUTED, false));
         c.addView(holder, cardParams());
 
         io.execute(() -> {
+            JSONObject health = null;
+            JSONObject heartbeat = null;
+            String healthError = null;
+            String heartbeatError = null;
+
             try {
-                JSONObject d = api.api("mod_health", "GET", null,
+                health = api.api("mod_health", "GET", null,
                         "&guild_id=" + URLEncoder.encode(currentGuildId, "UTF-8"));
-                main.post(() -> {
-                    holder.removeAllViews();
-                    holder.addView(botHealthCard("Sharla", d.optJSONObject("sharla"), true));
-                    holder.addView(spacer(12));
-                    holder.addView(botHealthCard("Head Pool", d.optJSONObject("headpool"), false));
-                    holder.addView(spacer(8));
-                    holder.addView(text("Checked " + d.optString("checked_at", ""), 12, MUTED, false));
-                });
             } catch (Exception e) {
-                main.post(() -> {
-                    holder.removeAllViews();
-                    holder.addView(text(e.getMessage(), 14, RED, false));
-                });
+                healthError = e.getMessage();
             }
+
+            try {
+                heartbeat = api.publicJson("api/headpool.json");
+            } catch (Exception e) {
+                heartbeatError = e.getMessage();
+            }
+
+            final JSONObject finalHealth = health;
+            final JSONObject finalHeartbeat = heartbeat;
+            final String finalHealthError = healthError;
+            final String finalHeartbeatError = heartbeatError;
+
+            main.post(() -> {
+                holder.removeAllViews();
+
+                if (finalHealth != null) {
+                    holder.addView(botHealthCard("Sharla", finalHealth.optJSONObject("sharla"), true));
+                    holder.addView(spacer(12));
+                    holder.addView(botHealthCard("Head Pool", finalHealth.optJSONObject("headpool"), false));
+                    holder.addView(spacer(12));
+                } else {
+                    holder.addView(text("Bot health: " +
+                            (finalHealthError == null ? "Unavailable" : finalHealthError), 14, RED, false));
+                    holder.addView(spacer(12));
+                }
+
+                holder.addView(heartbeatHealthCard(finalHeartbeat, finalHeartbeatError));
+
+                if (finalHealth != null) {
+                    holder.addView(spacer(8));
+                    holder.addView(text("Checked " + finalHealth.optString("checked_at", ""), 12, MUTED, false));
+                }
+            });
         });
 
         return wrapScroll(c);
     }
+
+    private View heartbeatHealthCard(JSONObject data, String error) {
+        LinearLayout box = cardInner();
+        box.addView(text("💓 Head Pool Website Heartbeat", 18, TEXT, true));
+
+        if (data == null) {
+            box.addView(text("Unavailable", 14, RED, true));
+            box.addView(statLine("Offline threshold", "150 sec"));
+            box.addView(statLine("HTTP result", "Failed"));
+            box.addView(text("Could not read api/headpool.json" +
+                    (error == null ? "." : ": " + error), 12, MUTED, false));
+            return box;
+        }
+
+        String updatedAt = data.optString("updated_at", "");
+        long ageSeconds = -1;
+        try {
+            ageSeconds = Math.max(0,
+                    (System.currentTimeMillis() - Instant.parse(updatedAt).toEpochMilli()) / 1000L);
+        } catch (Exception ignored) {}
+
+        boolean healthy = ageSeconds >= 0 && ageSeconds < 150;
+        long commandTotal = data.has("command_count")
+                ? data.optLong("command_count", 0)
+                : data.optLong("slash_commands", 0) + data.optLong("prefix_commands", 0);
+        long uptime = data.optLong("uptime_seconds", 0);
+        if (healthy && ageSeconds >= 0) uptime += ageSeconds;
+
+        box.addView(text(healthy ? "● Healthy" : "● Stale / offline",
+                16, healthy ? GREEN : RED, true));
+        box.addView(statLine("Last heartbeat",
+                ageSeconds < 0 ? "Unknown" : heartbeatAgeText(ageSeconds)));
+        box.addView(statLine("Offline threshold", "150 sec"));
+        box.addView(statLine("HTTP result", "HTTP 200"));
+        box.addView(statLine("Updated", updatedAt.isEmpty() ? "—" : updatedAt));
+        box.addView(statLine("Servers", data.has("guilds") ? String.valueOf(data.optInt("guilds", 0)) : "—"));
+        box.addView(statLine("Commands", commandTotal > 0 ? String.valueOf(commandTotal) : "—"));
+        box.addView(statLine("Bot uptime", uptime > 0 ? durationText(uptime) : "—"));
+        box.addView(statLine("Website state", ageSeconds < 0 ? "Unknown" : (healthy ? "Fresh" : "Expired")));
+
+        box.addView(text(
+                healthy
+                        ? "Nerdhalla is receiving a fresh Head Pool heartbeat."
+                        : "The heartbeat is older than the website cutoff. Head Pool may still be running, but Nerdhalla will treat this heartbeat as offline until a fresh update arrives.",
+                12, MUTED, false));
+        return box;
+    }
+
+    private String heartbeatAgeText(long seconds) {
+        if (seconds < 60) return seconds + "s ago";
+        long minutes = seconds / 60;
+        long remSeconds = seconds % 60;
+        if (minutes < 60) return minutes + "m " + remSeconds + "s ago";
+        long hours = minutes / 60;
+        long remMinutes = minutes % 60;
+        if (hours < 24) return hours + "h " + remMinutes + "m ago";
+        long days = hours / 24;
+        long remHours = hours % 24;
+        return days + "d " + remHours + "h ago";
+    }
+
+    private String durationText(long seconds) {
+        long s = Math.max(0, seconds);
+        long days = s / 86400;
+        s %= 86400;
+        long hours = s / 3600;
+        s %= 3600;
+        long minutes = s / 60;
+        if (days > 0) return days + "d " + hours + "h";
+        if (hours > 0) return hours + "h " + minutes + "m";
+        return minutes + "m";
+    }
+
+    private View botHealthCard
 
     private View botHealthCard(String name, JSONObject d, boolean sharla) {
         if (d == null) d = new JSONObject();
@@ -956,22 +1133,88 @@ public class MainActivity extends Activity {
     }
 
     private View renderMembersPage() {
+        selectedMemberId = "";
+        selectedMemberName = "";
+        memberRoleObjects = jsonList(guildData.optJSONArray("roles"));
+
         LinearLayout c = scrollColumn();
-        c.addView(pageHeading("Member Lookup", "Search by display name, username, mention, or user ID."));
+        c.addView(pageHeading("Member Lookup", "Search members and use your permitted moderation controls."));
 
         LinearLayout search = card();
         EditText q = edit("Name, @mention, or Discord user ID", false);
         search.addView(q, fullWrap());
         Button go = primaryButton("Look Up Member");
         search.addView(go, buttonParams());
+
         LinearLayout results = new LinearLayout(this);
         results.setOrientation(LinearLayout.VERTICAL);
         search.addView(results);
         c.addView(search, cardParams());
 
+        if (hasAnyMemberModeration()) {
+            LinearLayout mod = card();
+            mod.addView(sectionTitle("🛡 Moderate selected member"));
+
+            memberModerationSelected = text(
+                    "Choose Manage on a member result.", 13, MUTED, false);
+            mod.addView(memberModerationSelected);
+
+            memberModerationReason = edit(
+                    "Reason for warning / timeout / kick / ban", false);
+            addField(mod, "Reason", memberModerationReason);
+
+            memberTimeoutSpinner = darkSpinner(list(
+                    "5 minutes", "10 minutes", "30 minutes", "1 hour",
+                    "6 hours", "1 day", "7 days"));
+            addField(mod, "Timeout", memberTimeoutSpinner);
+
+            List<String> roleLabels = new ArrayList<>();
+            roleLabels.add("Choose role");
+            for (JSONObject role : memberRoleObjects) {
+                roleLabels.add("@" + role.optString("name", role.optString("id", "Role")));
+            }
+            memberRoleSpinner = darkSpinner(roleLabels);
+            addField(mod, "Role", memberRoleSpinner);
+
+            if (hasPerm("member_moderation")) {
+                addMemberActionButton(mod, "Warn", "warn", false);
+                addMemberActionButton(mod, "Timeout", "timeout", false);
+                addMemberActionButton(mod, "Remove Timeout", "untimeout", false);
+            }
+
+            if (hasPerm("member_roles")) {
+                addMemberActionButton(mod, "Add Role", "add_role", false);
+                addMemberActionButton(mod, "Remove Role", "remove_role", false);
+            }
+
+            if (hasPerm("member_kick_ban")) {
+                addMemberActionButton(mod, "Kick", "kick", true);
+                addMemberActionButton(mod, "Ban", "ban", true);
+
+                EditText unbanId = edit("Banned Discord user ID", false);
+                addField(mod, "Unban by ID", unbanId);
+                Button unban = secondaryButton("Unban ID");
+                mod.addView(unban, buttonParams());
+                unban.setOnClickListener(v -> {
+                    String id = unbanId.getText().toString().trim();
+                    if (id.isEmpty()) {
+                        toast("Enter a banned Discord user ID.");
+                        return;
+                    }
+                    runMemberAction("unban", id);
+                });
+            }
+
+            c.addView(mod, cardParams());
+        }
+
         go.setOnClickListener(v -> {
             String query = q.getText().toString().trim();
-            if (query.isEmpty()) return;
+            if (query.isEmpty()) {
+                toast("Enter a member name, mention, or user ID.");
+                return;
+            }
+
             results.removeAllViews();
             results.addView(text("Searching…", 13, MUTED, false));
             io.execute(() -> {
@@ -992,20 +1235,121 @@ public class MainActivity extends Activity {
         return wrapScroll(c);
     }
 
+    private boolean hasAnyMemberModeration() {
+        return hasPerm("member_moderation") ||
+                hasPerm("member_roles") ||
+                hasPerm("member_kick_ban");
+    }
+
+    private void addMemberActionButton(LinearLayout parent, String label, String action, boolean dangerous) {
+        Button button = dangerous ? dangerButton(label) : secondaryButton(label);
+        parent.addView(button, buttonParams());
+        button.setOnClickListener(v -> runMemberAction(action, selectedMemberId));
+    }
+
+    private int selectedTimeoutMinutes() {
+        if (memberTimeoutSpinner == null) return 5;
+        switch (memberTimeoutSpinner.getSelectedItemPosition()) {
+            case 1: return 10;
+            case 2: return 30;
+            case 3: return 60;
+            case 4: return 360;
+            case 5: return 1440;
+            case 6: return 10080;
+            default: return 5;
+        }
+    }
+
+    private String selectedMemberRoleId() {
+        if (memberRoleSpinner == null) return "";
+        int pos = memberRoleSpinner.getSelectedItemPosition();
+        int idx = pos - 1;
+        if (idx < 0 || idx >= memberRoleObjects.size()) return "";
+        return memberRoleObjects.get(idx).optString("id", "");
+    }
+
+    private void runMemberAction(String action, String memberId) {
+        if (memberId == null || memberId.trim().isEmpty()) {
+            toast("Choose a member first.");
+            return;
+        }
+
+        String roleId = selectedMemberRoleId();
+        if (("add_role".equals(action) || "remove_role".equals(action)) && roleId.isEmpty()) {
+            toast("Choose a role first.");
+            return;
+        }
+
+        Runnable execute = () -> {
+            JSONObject body = new JSONObject();
+            try {
+                body.put("guild_id", currentGuildId);
+                body.put("member_id", memberId.trim());
+                body.put("action", action);
+                body.put("reason", memberModerationReason == null
+                        ? "" : memberModerationReason.getText().toString().trim());
+                body.put("minutes", String.valueOf(selectedTimeoutMinutes()));
+                body.put("role_id", roleId);
+            } catch (Exception ignored) {}
+
+            post("suite_member_action", body, result -> {
+                toast(result.optString("message", "Done."));
+                if ("kick".equals(action) || "ban".equals(action)) {
+                    selectedMemberId = "";
+                    selectedMemberName = "";
+                    if (memberModerationSelected != null) {
+                        memberModerationSelected.setText("Choose Manage on a member result.");
+                    }
+                }
+            });
+        };
+
+        if ("kick".equals(action) || "ban".equals(action)) {
+            confirm(action.equals("kick") ? "Kick member?" : "Ban member?",
+                    (action.equals("kick") ? "Kick " : "Ban ") +
+                            (selectedMemberName.isEmpty() ? memberId : selectedMemberName) + "?",
+                    execute);
+        } else {
+            execute.run();
+        }
+    }
+
     private void renderMemberResults(LinearLayout results, JSONArray members) {
         results.removeAllViews();
+
         if (members == null || members.length() == 0) {
             results.addView(text("No matching member found.", 13, MUTED, false));
             return;
         }
+
         for (int i = 0; i < members.length(); i++) {
             JSONObject m = members.optJSONObject(i);
             if (m == null) continue;
+
             LinearLayout card = cardInner();
-            card.addView(text(m.optString("display_name", m.optString("username", m.optString("id", "Member"))), 17, TEXT, true));
-            card.addView(text("@" + m.optString("username", "") + "  •  " + m.optString("id", ""), 12, MUTED, false));
-            card.addView(statLine("Administrator", m.optBoolean("administrator", false) ? "Yes" : "No"));
+            String display = m.optString("display_name",
+                    m.optString("username", m.optString("id", "Member")));
+            card.addView(text(display, 17, TEXT, true));
+            card.addView(text("@" + m.optString("username", "") +
+                    "  •  " + m.optString("id", ""), 12, MUTED, false));
+            card.addView(statLine("Administrator",
+                    m.optBoolean("administrator", false) ? "Yes" : "No"));
             card.addView(statLine("Joined", m.optString("joined_at", "—")));
+            card.addView(statLine("Account created", m.optString("created_at", "—")));
+            card.addView(statLine("Presence", m.optString("status", "Not tracked")));
+
+            JSONArray roles = m.optJSONArray("roles");
+            if (roles != null && roles.length() > 0) {
+                StringBuilder roleText = new StringBuilder();
+                for (int r = 0; r < roles.length(); r++) {
+                    JSONObject role = roles.optJSONObject(r);
+                    if (role == null) continue;
+                    if (roleText.length() > 0) roleText.append(", ");
+                    roleText.append("@").append(role.optString("name", role.optString("id", "Role")));
+                }
+                if (roleText.length() > 0) card.addView(statLine("Roles", roleText.toString()));
+            }
+
             JSONObject profile = m.optJSONObject("profile");
             if (profile != null) {
                 card.addView(spacer(6));
@@ -1013,6 +1357,21 @@ public class MainActivity extends Activity {
                         " • " + profile.optString("tier", "No tier") +
                         " • " + profile.optInt("tokens", 0) + " tokens", 13, GOLD, false));
             }
+
+            if (hasAnyMemberModeration()) {
+                Button manage = secondaryButton("Manage " + display);
+                card.addView(manage, buttonParams());
+                manage.setOnClickListener(v -> {
+                    selectedMemberId = m.optString("id", "");
+                    selectedMemberName = display;
+                    if (memberModerationSelected != null) {
+                        memberModerationSelected.setText(
+                                "Selected: " + display + " (" + selectedMemberId + ")");
+                    }
+                    toast("Selected " + display + " for moderation.");
+                });
+            }
+
             results.addView(card, cardParams());
         }
     }
@@ -1103,7 +1462,7 @@ public class MainActivity extends Activity {
 
     private View renderAnnouncementPage() {
         LinearLayout c = scrollColumn();
-        c.addView(pageHeading("Announcements", "Compose and post a Discord announcement."));
+        c.addView(pageHeading("Announcements", "Compose, post, or schedule a Discord announcement."));
 
         List<JSONObject> channels = filterChannels("text");
         List<JSONObject> roles = jsonList(guildData.optJSONArray("roles"));
@@ -1140,39 +1499,119 @@ public class MainActivity extends Activity {
         EditText footer = edit("Footer (optional)", false);
         addField(form, "Footer", footer);
 
-        Button post = primaryButton("Post Announcement");
-        form.addView(post, buttonParams());
-        post.setOnClickListener(v -> {
-            int cp = channel.getSelectedItemPosition();
-            if (cp < 0 || cp >= channels.size()) {
-                toast("Choose a channel.");
-                return;
-            }
-            String mode = String.valueOf(mention.getSelectedItem());
-            String roleId = null;
-            if ("role".equals(mode) && role.getSelectedItemPosition() >= 0 && role.getSelectedItemPosition() < roles.size()) {
-                roleId = roles.get(role.getSelectedItemPosition()).optString("id", null);
-            }
-            JSONObject b = new JSONObject();
-            try {
-                b.put("guild_id", currentGuildId);
-                b.put("channel_id", channels.get(cp).optString("id", ""));
-                b.put("title", title.getText().toString().trim());
-                b.put("markdown", body.getText().toString());
-                b.put("color", color.getText().toString().trim());
-                b.put("image_url", image.getText().toString().trim());
-                b.put("thumbnail_url", thumb.getText().toString().trim());
-                b.put("footer", footer.getText().toString().trim());
-                b.put("mention_mode", mode);
-                if (roleId == null) b.put(JSONObject.NULL != null ? "role_id" : "role_id", JSONObject.NULL);
-                else b.put("role_id", roleId);
-            } catch (Exception ignored) {}
-            confirm("Post announcement?", "Post this announcement to Discord now?", () ->
-                    post("mod_announcement", b, result -> toast("Announcement posted.")));
-        });
+        if (hasPerm("announcements")) {
+            Button postNow = primaryButton("Post Announcement Now");
+            form.addView(postNow, buttonParams());
+            postNow.setOnClickListener(v -> {
+                JSONObject payload = buildAnnouncementPayload(
+                        channels, roles, channel, title, body, mention, role,
+                        color, image, thumb, footer);
+                if (payload == null) return;
+
+                confirm("Post announcement?", "Post this announcement to Discord now?", () ->
+                        post("mod_announcement", payload,
+                                result -> toast("Announcement posted.")));
+            });
+        }
+
+        if (hasPerm("scheduled_announcements")) {
+            form.addView(spacer(14));
+            form.addView(sectionTitle("🗓 Schedule this announcement"));
+
+            Button when = secondaryButton("Choose Date & Time");
+            form.addView(when, buttonParams());
+            when.setOnClickListener(v -> chooseScheduleTime(when));
+
+            Button schedule = primaryButton("Schedule Announcement");
+            form.addView(schedule, buttonParams());
+            schedule.setOnClickListener(v -> {
+                if (scheduleAtMillis <= System.currentTimeMillis() + 20000) {
+                    toast("Choose a time at least 20 seconds in the future.");
+                    return;
+                }
+
+                JSONObject payload = buildAnnouncementPayload(
+                        channels, roles, channel, title, body, mention, role,
+                        color, image, thumb, footer);
+                if (payload == null) return;
+
+                try {
+                    payload.put("run_at", Instant.ofEpochMilli(scheduleAtMillis).toString());
+                    payload.put("recurrence", "once");
+                    payload.put("timezone", java.util.TimeZone.getDefault().getID());
+                    payload.put("weekdays", new JSONArray());
+                } catch (Exception ignored) {}
+
+                confirm("Schedule announcement?",
+                        "Schedule this announcement for " +
+                                new java.util.Date(scheduleAtMillis).toString() + "?",
+                        () -> post("suite_schedule_save", payload, result -> {
+                            toast("Announcement scheduled.");
+                            scheduleAtMillis = 0;
+                            when.setText("Choose Date & Time");
+                        }));
+            });
+        }
 
         c.addView(form, cardParams());
         return wrapScroll(c);
+    }
+
+    private JSONObject buildAnnouncementPayload(
+            List<JSONObject> channels,
+            List<JSONObject> roles,
+            Spinner channel,
+            EditText title,
+            EditText body,
+            Spinner mention,
+            Spinner role,
+            EditText color,
+            EditText image,
+            EditText thumb,
+            EditText footer) {
+
+        int cp = channel.getSelectedItemPosition();
+        if (cp < 0 || cp >= channels.size()) {
+            toast("Choose a channel.");
+            return null;
+        }
+
+        String titleTextValue = title.getText().toString().trim();
+        String bodyText = body.getText().toString();
+        if (titleTextValue.isEmpty() && bodyText.trim().isEmpty()) {
+            toast("Add a title or announcement message first.");
+            return null;
+        }
+        if (bodyText.length() > 4000) {
+            toast("Announcement body is over 4000 Discord characters.");
+            return null;
+        }
+
+        String mode = String.valueOf(mention.getSelectedItem());
+        String roleId = null;
+        if ("role".equals(mode)) {
+            int rp = role.getSelectedItemPosition();
+            if (rp < 0 || rp >= roles.size()) {
+                toast("Choose a role to mention.");
+                return null;
+            }
+            roleId = roles.get(rp).optString("id", "");
+        }
+
+        JSONObject payload = new JSONObject();
+        try {
+            payload.put("guild_id", currentGuildId);
+            payload.put("channel_id", channels.get(cp).optString("id", ""));
+            payload.put("title", titleTextValue);
+            payload.put("markdown", bodyText);
+            payload.put("color", color.getText().toString().trim());
+            payload.put("image_url", image.getText().toString().trim());
+            payload.put("thumbnail_url", thumb.getText().toString().trim());
+            payload.put("footer", footer.getText().toString().trim());
+            payload.put("mention_mode", mode);
+            payload.put("role_id", roleId == null ? JSONObject.NULL : roleId);
+        } catch (Exception ignored) {}
+        return payload;
     }
 
     private View renderSchedulesPage() {
@@ -1218,8 +1657,11 @@ public class MainActivity extends Activity {
                 b.put("mention_mode", "none");
                 b.put("role_id", JSONObject.NULL);
                 b.put("run_at", Instant.ofEpochMilli(scheduleAtMillis).toString());
+                b.put("recurrence", "once");
+                b.put("timezone", java.util.TimeZone.getDefault().getID());
+                b.put("weekdays", new JSONArray());
             } catch (Exception ignored) {}
-            post("mod_schedule_create", b, result -> {
+            post("suite_schedule_save", b, result -> {
                 toast("Announcement scheduled.");
                 scheduleAtMillis = 0;
                 renderAdmin();
@@ -1235,7 +1677,7 @@ public class MainActivity extends Activity {
 
         io.execute(() -> {
             try {
-                JSONObject d = api.api("mod_schedules", "GET", null,
+                JSONObject d = api.api("suite_schedules", "GET", null,
                         "&guild_id=" + URLEncoder.encode(currentGuildId, "UTF-8"));
                 main.post(() -> renderSchedulesList(list, d.optJSONArray("pending")));
             } catch (Exception e) {
@@ -1271,7 +1713,7 @@ public class MainActivity extends Activity {
                     b.put("guild_id", currentGuildId);
                     b.put("schedule_id", x.optString("id", ""));
                 } catch (Exception ignored) {}
-                post("mod_schedule_cancel", b, result -> {
+                post("suite_schedule_cancel", b, result -> {
                     toast("Scheduled announcement cancelled.");
                     renderAdmin();
                 });
