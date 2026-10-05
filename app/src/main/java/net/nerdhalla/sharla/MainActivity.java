@@ -3,6 +3,7 @@ package net.nerdhalla.sharla;
 import android.app.Activity;
 import android.app.AlertDialog;
 import android.app.DatePickerDialog;
+import android.app.DownloadManager;
 import android.app.TimePickerDialog;
 import android.content.Intent;
 import android.net.Uri;
@@ -14,6 +15,7 @@ import android.graphics.drawable.GradientDrawable;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
+import android.os.Environment;
 import android.os.Looper;
 import android.text.InputType;
 import android.view.Gravity;
@@ -876,8 +878,14 @@ public class MainActivity extends Activity {
             case "announce":
                 page = renderAnnouncementPage();
                 break;
-            case "schedules":
-                page = renderSchedulesPage();
+            case "homeworlds":
+                page = renderHomeworldsPage();
+                break;
+            case "moderators":
+                page = renderModeratorAccessPage();
+                break;
+            case "backups":
+                page = renderBackupsPage();
                 break;
             default:
                 page = renderHealthPage();
@@ -916,9 +924,12 @@ public class MainActivity extends Activity {
 
         addAdminTab(row, "health", "❤️ Health", hasPerm("live_health"));
         addAdminTab(row, "talk", "💬 Talk", guildData.optBoolean("full_admin", false));
-        addAdminTab(row, "members", "👤 Members", hasPerm("member_lookup"));
-        addAdminTab(row, "settings", "⚙ Settings", hasPerm("server_settings"));
         addAdminTab(row, "announce", "📣 Announce", hasPerm("announcements") || hasPerm("scheduled_announcements"));
+        addAdminTab(row, "members", "👤 Members", hasPerm("member_lookup"));
+        addAdminTab(row, "homeworlds", "🎮 Homeworlds", hasPerm("homeworlds_admin"));
+        addAdminTab(row, "settings", "⚙ Settings", hasPerm("server_settings"));
+        addAdminTab(row, "moderators", "🛡 Moderator Access", isAdminOwner());
+        addAdminTab(row, "backups", "💾 Backup & Restore", isAdminOwner());
 
         scroller.addView(row);
         return scroller;
@@ -943,6 +954,731 @@ public class MainActivity extends Activity {
             if (name.equals(p.optString(i))) return true;
         }
         return false;
+    }
+
+
+    private boolean isAdminOwner() {
+        return adminAccess != null &&
+                adminAccess.optBoolean("talk_as_sharla_owner", false) &&
+                guildData != null &&
+                guildData.optBoolean("full_admin", false);
+    }
+
+    private View renderModeratorAccessPage() {
+        LinearLayout c = scrollColumn();
+        c.addView(pageHeading("Moderator Access",
+                "Choose which Discord roles may use specific Nerdhalla Admin tools. Talk as Sharla and backups remain owner-only."));
+
+        if (!isAdminOwner()) {
+            c.addView(infoCard("Owner only", "Only the Nerdhalla owner can change moderator access."));
+            return wrapScroll(c);
+        }
+
+        LinearLayout holder = card();
+        holder.addView(text("Loading moderator access…", 13, MUTED, false));
+        c.addView(holder, cardParams());
+
+        io.execute(() -> {
+            try {
+                JSONObject config = api.api("mod_access_config", "GET", null,
+                        "&guild_id=" + URLEncoder.encode(currentGuildId, "UTF-8"));
+                main.post(() -> renderModeratorAccessConfig(holder, config));
+            } catch (Exception e) {
+                main.post(() -> {
+                    holder.removeAllViews();
+                    holder.addView(text(e.getMessage(), 13, RED, false));
+                });
+            }
+        });
+
+        return wrapScroll(c);
+    }
+
+    private void renderModeratorAccessConfig(LinearLayout holder, JSONObject config) {
+        holder.removeAllViews();
+
+        List<JSONObject> roles = jsonList(guildData.optJSONArray("roles"));
+        List<String> roleLabels = new ArrayList<>();
+        roleLabels.add("Choose Discord role");
+        for (JSONObject role : roles) {
+            roleLabels.add("@" + role.optString("name", role.optString("id", "Role")));
+        }
+        Spinner roleSpinner = darkSpinner(roleLabels);
+        addField(holder, "Moderator role", roleSpinner);
+
+        JSONObject featureLabels = new JSONObject();
+        try {
+            featureLabels.put("server_settings", "Server settings");
+            featureLabels.put("announcements", "Post announcements");
+            featureLabels.put("scheduled_announcements", "Scheduled announcements");
+            featureLabels.put("member_lookup", "Member lookup");
+            featureLabels.put("member_moderation", "Member moderation");
+            featureLabels.put("member_roles", "Member role management");
+            featureLabels.put("member_kick_ban", "Kick / ban members");
+            featureLabels.put("live_health", "Live bot health");
+            featureLabels.put("homeworlds_admin", "Homeworlds Admin");
+
+            JSONObject remote = config.optJSONObject("features");
+            if (remote != null) {
+                JSONArray remoteNames = remote.names();
+                if (remoteNames != null) {
+                    for (int i = 0; i < remoteNames.length(); i++) {
+                        String key = remoteNames.optString(i, "");
+                        if (!key.isEmpty()) featureLabels.put(key, remote.optString(key, key));
+                    }
+                }
+            }
+        } catch (Exception ignored) {}
+
+        holder.addView(sectionTitle("Allowed features"));
+        List<String> featureKeys = new ArrayList<>();
+        List<Switch> featureSwitches = new ArrayList<>();
+        JSONArray names = featureLabels.names();
+        if (names != null) {
+            for (int i = 0; i < names.length(); i++) {
+                String key = names.optString(i, "");
+                if (key.isEmpty()) continue;
+                featureKeys.add(key);
+                Switch sw = switchRow(featureLabels.optString(key, key), false);
+                featureSwitches.add(sw);
+                holder.addView(sw);
+            }
+        }
+
+        JSONArray entries = config.optJSONArray("entries");
+        if (entries == null) entries = new JSONArray();
+        final JSONArray finalEntries = entries;
+
+        Runnable syncRole = () -> {
+            int pos = roleSpinner.getSelectedItemPosition() - 1;
+            String roleId = pos >= 0 && pos < roles.size()
+                    ? roles.get(pos).optString("id", "") : "";
+            JSONObject entry = moderatorEntryForRole(finalEntries, roleId);
+            JSONArray selected = entry == null ? null : entry.optJSONArray("features");
+            for (int i = 0; i < featureSwitches.size(); i++) {
+                featureSwitches.get(i).setChecked(jsonArrayContains(selected, featureKeys.get(i)));
+            }
+        };
+        roleSpinner.setOnItemSelectedListener(new SimpleItemSelectedListener(position -> syncRole.run()));
+
+        Button save = primaryButton("Save Role Access");
+        holder.addView(save, buttonParams());
+        save.setOnClickListener(v -> {
+            int pos = roleSpinner.getSelectedItemPosition() - 1;
+            if (pos < 0 || pos >= roles.size()) {
+                toast("Choose a Discord role first.");
+                return;
+            }
+            JSONArray selected = new JSONArray();
+            for (int i = 0; i < featureSwitches.size(); i++) {
+                if (featureSwitches.get(i).isChecked()) selected.put(featureKeys.get(i));
+            }
+            if (selected.length() == 0) {
+                toast("Choose at least one feature, or use Remove Role Access.");
+                return;
+            }
+            JSONObject body = new JSONObject();
+            try {
+                body.put("guild_id", currentGuildId);
+                body.put("role_id", roles.get(pos).optString("id", ""));
+                body.put("features", selected);
+            } catch (Exception ignored) {}
+            post("mod_access_save", body, result -> {
+                toast("Moderator role access saved.");
+                renderAdmin();
+            });
+        });
+
+        Button remove = secondaryButton("Remove Role Access");
+        holder.addView(remove, buttonParams());
+        remove.setOnClickListener(v -> {
+            int pos = roleSpinner.getSelectedItemPosition() - 1;
+            if (pos < 0 || pos >= roles.size()) {
+                toast("Choose a Discord role first.");
+                return;
+            }
+            String roleName = roles.get(pos).optString("name", "role");
+            confirm("Remove moderator access?",
+                    "Remove all Nerdhalla Admin access for @" + roleName + "?",
+                    () -> {
+                        JSONObject body = new JSONObject();
+                        try {
+                            body.put("guild_id", currentGuildId);
+                            body.put("role_id", roles.get(pos).optString("id", ""));
+                            body.put("features", new JSONArray());
+                        } catch (Exception ignored) {}
+                        post("mod_access_save", body, result -> {
+                            toast("Moderator role access removed.");
+                            renderAdmin();
+                        });
+                    });
+        });
+
+        holder.addView(spacer(16));
+        holder.addView(sectionTitle("Configured moderator roles"));
+        if (finalEntries.length() == 0) {
+            holder.addView(text("No moderator roles configured yet.", 13, MUTED, false));
+        } else {
+            for (int i = 0; i < finalEntries.length(); i++) {
+                JSONObject entry = finalEntries.optJSONObject(i);
+                if (entry == null) continue;
+                String roleName = entry.optString("role_name", entry.optString("role_id", "Role"));
+                JSONArray features = entry.optJSONArray("features");
+                StringBuilder list = new StringBuilder();
+                if (features != null) {
+                    for (int j = 0; j < features.length(); j++) {
+                        String key = features.optString(j, "");
+                        if (list.length() > 0) list.append(" • ");
+                        list.append(featureLabels.optString(key, key));
+                    }
+                }
+                LinearLayout row = cardInner();
+                row.addView(text("@" + roleName, 16, TEXT, true));
+                row.addView(text(list.length() == 0 ? "No features" : list.toString(),
+                        12, MUTED, false));
+                if (entry.optBoolean("missing", false)) {
+                    row.addView(text("Discord role no longer exists.", 12, RED, false));
+                }
+                holder.addView(row, cardParams());
+            }
+        }
+        syncRole.run();
+    }
+
+    private JSONObject moderatorEntryForRole(JSONArray entries, String roleId) {
+        if (entries == null || roleId == null || roleId.isEmpty()) return null;
+        for (int i = 0; i < entries.length(); i++) {
+            JSONObject entry = entries.optJSONObject(i);
+            if (entry != null && roleId.equals(entry.optString("role_id", ""))) return entry;
+        }
+        return null;
+    }
+
+    private boolean jsonArrayContains(JSONArray array, String value) {
+        if (array == null) return false;
+        for (int i = 0; i < array.length(); i++) {
+            if (value.equals(array.optString(i, ""))) return true;
+        }
+        return false;
+    }
+
+    private View renderBackupsPage() {
+        LinearLayout c = scrollColumn();
+        c.addView(pageHeading("Backup & Restore",
+                "Owner-only backups of Sharla, Head Pool, and Homeworlds data. Restoring restarts both bots."));
+
+        if (!isAdminOwner()) {
+            c.addView(infoCard("Owner only", "Only the Nerdhalla owner can create or restore server backups."));
+            return wrapScroll(c);
+        }
+
+        LinearLayout actions = card();
+        Button create = primaryButton("Create Backup");
+        Button refresh = secondaryButton("Refresh Backups");
+        actions.addView(create, buttonParams());
+        actions.addView(refresh, buttonParams());
+        c.addView(actions, cardParams());
+
+        LinearLayout holder = card();
+        holder.addView(text("Loading backups…", 13, MUTED, false));
+        c.addView(holder, cardParams());
+
+        create.setOnClickListener(v -> post("suite_backup_create", new JSONObject(), result -> {
+            toast("Created " + result.optString("name", "backup") +
+                    (result.optString("database", "").isEmpty() ? "" : ". " + result.optString("database", "")));
+            loadBackupsInto(holder);
+        }));
+        refresh.setOnClickListener(v -> loadBackupsInto(holder));
+
+        loadBackupsInto(holder);
+        return wrapScroll(c);
+    }
+
+    private void loadBackupsInto(LinearLayout holder) {
+        holder.removeAllViews();
+        holder.addView(text("Loading backups…", 13, MUTED, false));
+        io.execute(() -> {
+            try {
+                JSONObject data = api.api("suite_backups");
+                main.post(() -> renderBackupsList(holder, data.optJSONArray("items")));
+            } catch (Exception e) {
+                main.post(() -> {
+                    holder.removeAllViews();
+                    holder.addView(text(e.getMessage(), 13, RED, false));
+                });
+            }
+        });
+    }
+
+    private void renderBackupsList(LinearLayout holder, JSONArray items) {
+        holder.removeAllViews();
+        holder.addView(sectionTitle("Available backups"));
+        if (items == null || items.length() == 0) {
+            holder.addView(text("No backups yet.", 13, MUTED, false));
+            return;
+        }
+
+        for (int i = 0; i < items.length(); i++) {
+            JSONObject item = items.optJSONObject(i);
+            if (item == null) continue;
+            String name = item.optString("name", "backup");
+            LinearLayout row = cardInner();
+            row.addView(text(name, 15, TEXT, true));
+            row.addView(text(item.optString("created_at", "") + "  •  " +
+                    humanBytes(item.optLong("size", 0)), 12, MUTED, false));
+
+            Button download = secondaryButton("Download");
+            row.addView(download, buttonParams());
+            download.setOnClickListener(v -> startBackupDownload(name));
+
+            Button restore = dangerButton("Restore");
+            row.addView(restore, buttonParams());
+            restore.setOnClickListener(v -> promptRestoreBackup(name, holder));
+
+            holder.addView(row, cardParams());
+        }
+    }
+
+    private void promptRestoreBackup(String name, LinearLayout holder) {
+        EditText input = edit("Type RESTORE", false);
+        new AlertDialog.Builder(this)
+                .setTitle("Restore " + name + "?")
+                .setMessage("This will restart Sharla and Head Pool. Type RESTORE exactly to continue.")
+                .setView(input)
+                .setNegativeButton("Cancel", null)
+                .setPositiveButton("Restore", (dialog, which) -> {
+                    String confirmText = input.getText().toString().trim();
+                    if (!"RESTORE".equals(confirmText)) {
+                        toast("Restore cancelled: confirmation text did not match.");
+                        return;
+                    }
+                    JSONObject body = new JSONObject();
+                    try {
+                        body.put("name", name);
+                        body.put("confirm", confirmText);
+                    } catch (Exception ignored) {}
+                    post("suite_backup_restore", body, result -> {
+                        toast(result.optString("message", "Backup restored."));
+                        loadBackupsInto(holder);
+                    });
+                })
+                .show();
+    }
+
+    private void startBackupDownload(String name) {
+        try {
+            String encoded = URLEncoder.encode(name, "UTF-8");
+            Uri uri = Uri.parse(BASE + "portal-api.php?action=suite_backup_download&name=" + encoded);
+            DownloadManager.Request request = new DownloadManager.Request(uri);
+            request.setTitle(name);
+            request.setDescription("Nerdhalla server backup");
+            request.setNotificationVisibility(
+                    DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED);
+            String cookie = CookieManager.getInstance().getCookie(BASE);
+            if (cookie != null && !cookie.isEmpty()) request.addRequestHeader("Cookie", cookie);
+            String fileName = name.replaceAll("[^A-Za-z0-9._-]", "_");
+            request.setDestinationInExternalPublicDir(Environment.DIRECTORY_DOWNLOADS, fileName);
+            DownloadManager manager = (DownloadManager) getSystemService(DOWNLOAD_SERVICE);
+            if (manager == null) throw new Exception("Android Download Manager is unavailable.");
+            manager.enqueue(request);
+            toast("Backup download started.");
+        } catch (Exception e) {
+            toast("Could not start backup download: " + e.getMessage());
+        }
+    }
+
+    private String humanBytes(long n) {
+        double value = Math.max(0, n);
+        if (value < 1024) return (long) value + " B";
+        value /= 1024.0;
+        if (value < 1024) return String.format(Locale.US, "%.1f KB", value);
+        value /= 1024.0;
+        if (value < 1024) return String.format(Locale.US, "%.1f MB", value);
+        value /= 1024.0;
+        return String.format(Locale.US, "%.1f GB", value);
+    }
+
+    private View renderHomeworldsPage() {
+        LinearLayout c = scrollColumn();
+        c.addView(pageHeading("Homeworlds Admin",
+                "Live Head Pool bridge for MySQL/state health, active games, matchmaking, force-stop controls, and owner stats tools."));
+
+        LinearLayout controls = card();
+        EditText filter = edit("Filter match / player / channel", false);
+        addField(controls, "Game filter", filter);
+        Button refresh = primaryButton("Refresh Homeworlds");
+        controls.addView(refresh, buttonParams());
+        c.addView(controls, cardParams());
+
+        LinearLayout holder = card();
+        holder.addView(text("Loading Homeworlds…", 13, MUTED, false));
+        c.addView(holder, cardParams());
+
+        refresh.setOnClickListener(v -> loadHomeworldsInto(holder, filter));
+
+        if (isAdminOwner()) {
+            LinearLayout stats = card();
+            stats.addView(sectionTitle("Owner stats correction"));
+
+            EditText player = edit("@username, mention, name, or Discord ID", false);
+            addField(stats, "Player", player);
+
+            Spinner scope = darkSpinner(list(
+                    "Choose scope", "Overall", "PvP", "Head Pool Easy",
+                    "Head Pool Normal", "Head Pool Hard"));
+            addField(stats, "Scope", scope);
+
+            Spinner stat = darkSpinner(list(
+                    "Choose stat", "Wins", "Losses", "Draws", "Games",
+                    "Cancelled", "Unknown results"));
+            addField(stats, "Stat", stat);
+
+            EditText value = edit("Final displayed value", false);
+            value.setInputType(InputType.TYPE_CLASS_NUMBER);
+            addField(stats, "Final displayed value", value);
+
+            Button set = primaryButton("Apply Correction");
+            stats.addView(set, buttonParams());
+            Button reset = secondaryButton("Reset Correction");
+            stats.addView(reset, buttonParams());
+
+            set.setOnClickListener(v -> {
+                String scopeValue = homeworldScopeValue(scope);
+                String statValue = homeworldStatValue(stat);
+                String raw = value.getText().toString().trim();
+                if (scopeValue.isEmpty() || statValue.isEmpty() || raw.isEmpty()) {
+                    toast("Choose a player, scope, stat, and final displayed value.");
+                    return;
+                }
+                long finalValue;
+                try {
+                    finalValue = Long.parseLong(raw);
+                    if (finalValue < 0) throw new NumberFormatException();
+                } catch (Exception e) {
+                    toast("Final displayed value must be a whole number of 0 or greater.");
+                    return;
+                }
+                resolveHomeworldsMemberId(player.getText().toString(), playerId -> {
+                    JSONObject body = new JSONObject();
+                    try {
+                        body.put("guild_id", currentGuildId);
+                        body.put("operation", "set");
+                        body.put("player_id", playerId);
+                        body.put("scope", scopeValue);
+                        body.put("stat", statValue);
+                        body.put("value", finalValue);
+                    } catch (Exception ignored) {}
+                    post("suite_homeworlds_stat", body, result -> {
+                        toast(result.optString("message", "Correction applied."));
+                        loadHomeworldsInto(holder, filter);
+                    });
+                });
+            });
+
+            reset.setOnClickListener(v -> {
+                String scopeValue = homeworldScopeValue(scope);
+                String statValue = homeworldStatValue(stat);
+                if (scopeValue.isEmpty() || statValue.isEmpty()) {
+                    toast("Choose a player, scope, and stat to reset.");
+                    return;
+                }
+                resolveHomeworldsMemberId(player.getText().toString(), playerId ->
+                        confirm("Reset correction?",
+                                "Remove this manual Homeworlds stat correction and return to the recorded value?",
+                                () -> {
+                                    JSONObject body = new JSONObject();
+                                    try {
+                                        body.put("guild_id", currentGuildId);
+                                        body.put("operation", "reset");
+                                        body.put("player_id", playerId);
+                                        body.put("scope", scopeValue);
+                                        body.put("stat", statValue);
+                                    } catch (Exception ignored) {}
+                                    post("suite_homeworlds_stat", body, result -> {
+                                        toast(result.optString("message", "Correction reset."));
+                                        loadHomeworldsInto(holder, filter);
+                                    });
+                                }));
+            });
+
+            stats.addView(spacer(18));
+            stats.addView(text("Danger zone — wipe Homeworlds user data", 17, RED, true));
+            stats.addView(text(
+                    "Permanently removes this user's Homeworlds archived match records, stat corrections, and matchmaking queue entry. Active games must be stopped first.",
+                    12, MUTED, false));
+
+            EditText wipePlayer = edit("@username, mention, name, or Discord ID", false);
+            addField(stats, "User to wipe", wipePlayer);
+            EditText wipeVerify = edit("Retype numeric Discord ID", false);
+            wipeVerify.setInputType(InputType.TYPE_CLASS_NUMBER);
+            addField(stats, "Verification 1", wipeVerify);
+            EditText wipePhrase = edit("WIPE HOMEWORLDS", false);
+            addField(stats, "Verification 2 — type exactly", wipePhrase);
+
+            Button wipe = dangerButton("Permanently Wipe Homeworlds Data");
+            stats.addView(wipe, buttonParams());
+            wipe.setOnClickListener(v -> resolveHomeworldsMemberId(
+                    wipePlayer.getText().toString(), playerId -> {
+                        String verifyId = wipeVerify.getText().toString().trim();
+                        String phrase = wipePhrase.getText().toString().trim();
+                        if (!playerId.equals(verifyId)) {
+                            toast("Verification failed: the retyped Discord ID does not match.");
+                            return;
+                        }
+                        if (!"WIPE HOMEWORLDS".equals(phrase)) {
+                            toast("Verification failed: type WIPE HOMEWORLDS exactly.");
+                            return;
+                        }
+                        confirm("FINAL CONFIRMATION",
+                                "Permanently wipe ALL stored Homeworlds stats/history/corrections for Discord user " +
+                                        playerId + "? This cannot be undone except from backup.",
+                                () -> {
+                                    JSONObject body = new JSONObject();
+                                    try {
+                                        body.put("guild_id", currentGuildId);
+                                        body.put("player_id", playerId);
+                                        body.put("verify_player_id", verifyId);
+                                        body.put("confirmation_phrase", phrase);
+                                    } catch (Exception ignored) {}
+                                    post("suite_homeworlds_wipe", body, result -> {
+                                        toast(result.optString("message", "Homeworlds user data wiped."));
+                                        wipePlayer.setText("");
+                                        wipeVerify.setText("");
+                                        wipePhrase.setText("");
+                                        loadHomeworldsInto(holder, filter);
+                                    });
+                                });
+                    }));
+
+            c.addView(stats, cardParams());
+        }
+
+        loadHomeworldsInto(holder, filter);
+        return wrapScroll(c);
+    }
+
+    private void loadHomeworldsInto(LinearLayout holder, EditText filter) {
+        String filterText = filter == null ? "" : filter.getText().toString().trim();
+        holder.removeAllViews();
+        holder.addView(text("Loading Homeworlds…", 13, MUTED, false));
+        io.execute(() -> {
+            try {
+                JSONObject data = api.api("suite_homeworlds", "GET", null,
+                        "&guild_id=" + URLEncoder.encode(currentGuildId, "UTF-8"));
+                main.post(() -> renderHomeworldsData(holder, data, filter, filterText));
+            } catch (Exception e) {
+                main.post(() -> {
+                    holder.removeAllViews();
+                    holder.addView(text(e.getMessage(), 13, RED, false));
+                });
+            }
+        });
+    }
+
+    private void renderHomeworldsData(
+            LinearLayout holder, JSONObject data, EditText filter, String filterText) {
+        holder.removeAllViews();
+
+        JSONObject db = data.optJSONObject("database");
+        if (db == null) db = new JSONObject();
+
+        holder.addView(sectionTitle("Database & Head Pool"));
+        holder.addView(statLine("Head Pool",
+                data.optBoolean("discord_ready", false) ? "Online / ready" : "Not ready"));
+        if (data.has("latency_ms")) {
+            holder.addView(statLine("Latency", data.optInt("latency_ms", 0) + " ms"));
+        }
+        holder.addView(statLine("MySQL",
+                db.optBoolean("ok", false)
+                        ? "Connected • " + db.optString("database", "") + " • " + db.optString("version", "")
+                        : "Error • " + db.optString("error", "unknown")));
+
+        holder.addView(spacer(10));
+        holder.addView(sectionTitle("Active / paused games"));
+        JSONArray games = data.optJSONArray("games");
+        int shown = 0;
+        String needle = filterText == null ? "" : filterText.toLowerCase(Locale.US);
+        if (games != null) {
+            for (int i = 0; i < games.length(); i++) {
+                JSONObject game = games.optJSONObject(i);
+                if (game == null) continue;
+                if (!needle.isEmpty() &&
+                        !game.toString().toLowerCase(Locale.US).contains(needle)) continue;
+
+                shown++;
+                LinearLayout row = cardInner();
+                row.addView(text("Match " + game.optString("id", "—"), 16, TEXT, true));
+                String details = "Channel " + game.optString("channel_id", "—") +
+                        " • " + game.optString("status", "");
+                if (!game.optString("turn", "").isEmpty()) {
+                    details += " • turn " + game.optString("turn", "");
+                }
+                row.addView(text(details, 12, MUTED, false));
+                row.addView(text(homeworldPlayersText(game.opt("players")), 12, MUTED, false));
+
+                String channelId = game.optString("channel_id", "");
+                if (!channelId.isEmpty()) {
+                    Button stop = dangerButton("Force Stop in Game Channel");
+                    row.addView(stop, buttonParams());
+                    stop.setOnClickListener(v -> confirm(
+                            "Force-stop Homeworlds game?",
+                            "Force-stop the Homeworlds game in channel " + channelId + "?",
+                            () -> {
+                                JSONObject body = new JSONObject();
+                                try {
+                                    body.put("guild_id", currentGuildId);
+                                    body.put("channel_id", channelId);
+                                    body.put("command", "hw stop");
+                                } catch (Exception ignored) {}
+                                post("suite_homeworlds_command", body, result -> {
+                                    toast(result.optString("message", "Command complete."));
+                                    loadHomeworldsInto(holder, filter);
+                                });
+                            }));
+                }
+                holder.addView(row, cardParams());
+            }
+        }
+        if (shown == 0) {
+            holder.addView(text(
+                    "No discovered active games match this filter. The bridge also checks MySQL and fallback state.",
+                    13, MUTED, false));
+        }
+
+        holder.addView(spacer(10));
+        holder.addView(sectionTitle("Matchmaking queue"));
+        JSONArray queue = data.optJSONArray("queue");
+        if (queue == null || queue.length() == 0) {
+            holder.addView(text("No queue entries discovered.", 13, MUTED, false));
+        } else {
+            for (int i = 0; i < queue.length(); i++) {
+                JSONObject item = queue.optJSONObject(i);
+                if (item == null) continue;
+                LinearLayout row = cardInner();
+                row.addView(text(item.optString("id", "Queue entry"), 15, TEXT, true));
+                row.addView(text(homeworldPlayersText(item.opt("players")) +
+                        " • " + item.optString("status", "queued"), 12, MUTED, false));
+                holder.addView(row, cardParams());
+            }
+        }
+    }
+
+    private String homeworldPlayersText(Object players) {
+        if (players == null || players == JSONObject.NULL) return "";
+        if (players instanceof JSONArray) {
+            JSONArray arr = (JSONArray) players;
+            StringBuilder out = new StringBuilder();
+            for (int i = 0; i < arr.length(); i++) {
+                Object value = arr.opt(i);
+                if (value == null || value == JSONObject.NULL) continue;
+                if (out.length() > 0) out.append(" vs ");
+                if (value instanceof JSONObject) {
+                    JSONObject p = (JSONObject) value;
+                    out.append(p.optString("display_name",
+                            p.optString("username", p.optString("id", p.toString()))));
+                } else {
+                    out.append(String.valueOf(value));
+                }
+            }
+            return out.toString();
+        }
+        if (players instanceof JSONObject) return players.toString();
+        return String.valueOf(players);
+    }
+
+    private String homeworldScopeValue(Spinner spinner) {
+        switch (spinner.getSelectedItemPosition()) {
+            case 1: return "overall";
+            case 2: return "pvp";
+            case 3: return "easy";
+            case 4: return "normal";
+            case 5: return "hard";
+            default: return "";
+        }
+    }
+
+    private String homeworldStatValue(Spinner spinner) {
+        switch (spinner.getSelectedItemPosition()) {
+            case 1: return "wins";
+            case 2: return "losses";
+            case 3: return "draws";
+            case 4: return "games";
+            case 5: return "cancelled";
+            case 6: return "unknown";
+            default: return "";
+        }
+    }
+
+    private void resolveHomeworldsMemberId(String raw, StringCallback callback) {
+        String query = raw == null ? "" : raw.trim();
+        if (query.isEmpty()) {
+            toast("Enter a member name, @username, mention, or Discord ID.");
+            return;
+        }
+
+        String direct = extractDiscordId(query);
+        if (!direct.isEmpty()) {
+            callback.onString(direct);
+            return;
+        }
+
+        showBusy(true);
+        io.execute(() -> {
+            try {
+                JSONObject data = api.api("mod_member_lookup", "GET", null,
+                        "&guild_id=" + URLEncoder.encode(currentGuildId, "UTF-8") +
+                                "&q=" + URLEncoder.encode(query, "UTF-8"));
+                JSONArray members = data.optJSONArray("members");
+                main.post(() -> {
+                    showBusy(false);
+                    if (members == null || members.length() == 0) {
+                        toast("No matching Discord member was found.");
+                        return;
+                    }
+                    if (members.length() == 1) {
+                        JSONObject member = members.optJSONObject(0);
+                        if (member != null) callback.onString(member.optString("id", ""));
+                        return;
+                    }
+
+                    List<String> labels = new ArrayList<>();
+                    List<String> ids = new ArrayList<>();
+                    for (int i = 0; i < members.length() && i < 15; i++) {
+                        JSONObject member = members.optJSONObject(i);
+                        if (member == null) continue;
+                        String id = member.optString("id", "");
+                        if (id.isEmpty()) continue;
+                        ids.add(id);
+                        labels.add(member.optString("display_name",
+                                member.optString("username", id)) +
+                                "  •  @" + member.optString("username", "") +
+                                "  •  " + id);
+                    }
+                    if (ids.isEmpty()) {
+                        toast("No matching Discord member was found.");
+                        return;
+                    }
+                    new AlertDialog.Builder(this)
+                            .setTitle("Choose matching member")
+                            .setItems(labels.toArray(new String[0]),
+                                    (dialog, which) -> callback.onString(ids.get(which)))
+                            .setNegativeButton("Cancel", null)
+                            .show();
+                });
+            } catch (Exception e) {
+                main.post(() -> {
+                    showBusy(false);
+                    toast(e.getMessage());
+                });
+            }
+        });
+    }
+
+    private String extractDiscordId(String raw) {
+        if (raw == null) return "";
+        java.util.regex.Matcher matcher =
+                java.util.regex.Pattern.compile("\\d{15,22}").matcher(raw);
+        return matcher.find() ? matcher.group() : "";
     }
 
     private View renderHealthPage() {
@@ -2178,6 +2914,10 @@ public class MainActivity extends Activity {
 
     private interface JsonCallback {
         void onResult(JSONObject result);
+    }
+
+    private interface StringCallback {
+        void onString(String value);
     }
 
     private interface PositionCallback {
