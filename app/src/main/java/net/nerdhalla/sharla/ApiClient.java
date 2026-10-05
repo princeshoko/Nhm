@@ -44,13 +44,19 @@ public class ApiClient {
         return request(url, method, body, !"GET".equalsIgnoreCase(method));
     }
 
+    public JSONObject publicJson(String relativePath) throws Exception {
+        String path = relativePath == null ? "" : relativePath.replaceFirst("^/+", "");
+        String sep = path.contains("?") ? "&" : "?";
+        return request(BASE + path + sep + "t=" + System.currentTimeMillis(), "GET", null, false);
+    }
+
     private JSONObject request(String urlText, String method, JSONObject body, boolean csrf) throws Exception {
         HttpURLConnection conn = (HttpURLConnection) new URL(urlText).openConnection();
         conn.setConnectTimeout(15000);
         conn.setReadTimeout(25000);
         conn.setRequestMethod(method);
         conn.setRequestProperty("Accept", "application/json");
-        conn.setRequestProperty("User-Agent", "NerdhallaSharlaAndroid/2.0");
+        conn.setRequestProperty("User-Agent", "NerdhallaAndroid/2.2");
 
         String cookie = CookieManager.getInstance().getCookie(BASE);
         if (cookie != null && !cookie.isEmpty()) {
