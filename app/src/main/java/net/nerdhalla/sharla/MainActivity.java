@@ -27,19 +27,18 @@ public class MainActivity extends Activity {
     private static final int BG = Color.rgb(11, 8, 17);
     private static final int BG2 = Color.rgb(18, 12, 28);
     private static final int PANEL = Color.rgb(23, 16, 32);
-    private static final int LINE = Color.rgb(53, 35, 71);
+    private static final int PURPLE = Color.rgb(155, 108, 255);
+    private static final int PURPLE_DARK = Color.rgb(74, 48, 112);
     private static final int TEXT = Color.rgb(245, 239, 255);
     private static final int MUTED = Color.rgb(170, 160, 183);
-    private static final int PURPLE = Color.rgb(155, 108, 255);
 
     private WebView webView;
     private ProgressBar progress;
     private TextView error;
-    private TextView pageTitle;
-    private TextView pageSubtitle;
-    private TextView mySharlaTab;
-    private TextView adminTab;
-    private String currentSection = "account";
+    private TextView sectionTitle;
+    private TextView mySharlaNav;
+    private TextView adminNav;
+    private String currentSection = "My Sharla";
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -53,20 +52,20 @@ public class MainActivity extends Activity {
         root.setBackgroundColor(BG);
 
         root.addView(buildAppBar(), new LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT, dp(64)));
+                LinearLayout.LayoutParams.MATCH_PARENT, dp(72)));
 
         progress = new ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal);
         progress.setMax(100);
         progress.setProgress(0);
-        progress.setBackgroundColor(BG2);
+        progress.setIndeterminate(false);
         root.addView(progress, new LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT, dp(2)));
+                LinearLayout.LayoutParams.MATCH_PARENT, dp(3)));
 
         error = new TextView(this);
         error.setTextColor(TEXT);
-        error.setTextSize(13);
+        error.setTextSize(14);
         error.setBackgroundColor(PANEL);
-        error.setPadding(dp(16), dp(12), dp(16), dp(12));
+        error.setPadding(dp(16), dp(14), dp(16), dp(14));
         error.setVisibility(View.GONE);
         root.addView(error, new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT,
@@ -74,8 +73,6 @@ public class MainActivity extends Activity {
 
         webView = new WebView(this);
         webView.setBackgroundColor(BG);
-        webView.setOverScrollMode(View.OVER_SCROLL_NEVER);
-        webView.setScrollBarStyle(View.SCROLLBARS_INSIDE_OVERLAY);
 
         WebSettings settings = webView.getSettings();
         settings.setJavaScriptEnabled(true);
@@ -88,7 +85,7 @@ public class MainActivity extends Activity {
         settings.setDisplayZoomControls(false);
         settings.setAllowFileAccess(false);
         settings.setAllowContentAccess(false);
-        settings.setMediaPlaybackRequiresUserGesture(true);
+        settings.setMediaPlaybackRequiresUserGesture(false);
 
         CookieManager cookies = CookieManager.getInstance();
         cookies.setAcceptCookie(true);
@@ -111,15 +108,15 @@ public class MainActivity extends Activity {
             @Override
             public void onPageStarted(WebView view, String url, Bitmap favicon) {
                 error.setVisibility(View.GONE);
-                syncSectionFromUrl(url);
+                progress.setVisibility(View.VISIBLE);
             }
 
             @Override
             public void onPageFinished(WebView view, String url) {
-                syncSectionFromUrl(url);
-                if (isNerdhallaDashboard(url)) {
-                    applyAppModeCss();
+                if (url != null && url.contains("nerdhalla.net")) {
+                    applyAppStyle(view);
                 }
+                updateTitleForUrl(url);
             }
 
             @Override
@@ -141,7 +138,7 @@ public class MainActivity extends Activity {
         if (savedInstanceState != null) {
             webView.restoreState(savedInstanceState);
         } else {
-            loadSection("account");
+            loadSection(MY_SHARLA, "My Sharla");
         }
     }
 
@@ -149,54 +146,47 @@ public class MainActivity extends Activity {
         LinearLayout bar = new LinearLayout(this);
         bar.setOrientation(LinearLayout.HORIZONTAL);
         bar.setGravity(Gravity.CENTER_VERTICAL);
-        bar.setPadding(dp(12), dp(8), dp(10), dp(8));
+        bar.setPadding(dp(14), dp(9), dp(10), dp(9));
         bar.setBackgroundColor(BG2);
 
         ImageView logo = new ImageView(this);
         logo.setImageResource(R.drawable.nerdhalla_icon);
         logo.setScaleType(ImageView.ScaleType.CENTER_CROP);
-        GradientDrawable logoBg = new GradientDrawable();
-        logoBg.setColor(Color.rgb(28, 20, 40));
-        logoBg.setCornerRadius(dp(10));
-        logoBg.setStroke(dp(1), LINE);
-        logo.setBackground(logoBg);
-        logo.setClipToOutline(true);
-        bar.addView(logo, new LinearLayout.LayoutParams(dp(44), dp(44)));
+        logo.setBackground(roundRect(PANEL, dp(12), PURPLE_DARK, dp(1)));
+        logo.setPadding(dp(2), dp(2), dp(2), dp(2));
+        bar.addView(logo, new LinearLayout.LayoutParams(dp(50), dp(50)));
 
         LinearLayout titles = new LinearLayout(this);
         titles.setOrientation(LinearLayout.VERTICAL);
         titles.setGravity(Gravity.CENTER_VERTICAL);
         titles.setPadding(dp(12), 0, 0, 0);
 
-        pageTitle = new TextView(this);
-        pageTitle.setText("My Sharla");
-        pageTitle.setTextColor(TEXT);
-        pageTitle.setTextSize(17);
-        pageTitle.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
+        TextView brand = new TextView(this);
+        brand.setText("NERDHALLA");
+        brand.setTextColor(TEXT);
+        brand.setTextSize(18);
+        brand.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
+        titles.addView(brand);
 
-        pageSubtitle = new TextView(this);
-        pageSubtitle.setText("Nerdhalla");
-        pageSubtitle.setTextColor(MUTED);
-        pageSubtitle.setTextSize(12);
+        sectionTitle = new TextView(this);
+        sectionTitle.setText("My Sharla");
+        sectionTitle.setTextColor(MUTED);
+        sectionTitle.setTextSize(13);
+        titles.addView(sectionTitle);
 
-        titles.addView(pageTitle);
-        titles.addView(pageSubtitle);
         bar.addView(titles, new LinearLayout.LayoutParams(0,
                 LinearLayout.LayoutParams.MATCH_PARENT, 1f));
 
         TextView refresh = new TextView(this);
         refresh.setText("↻");
         refresh.setTextColor(TEXT);
-        refresh.setTextSize(28);
+        refresh.setTextSize(26);
         refresh.setGravity(Gravity.CENTER);
-        refresh.setContentDescription("Refresh");
-        refresh.setOnClickListener(v -> webView.reload());
-        GradientDrawable refreshBg = new GradientDrawable();
-        refreshBg.setColor(PANEL);
-        refreshBg.setCornerRadius(dp(12));
-        refreshBg.setStroke(dp(1), LINE);
-        refresh.setBackground(refreshBg);
-        bar.addView(refresh, new LinearLayout.LayoutParams(dp(44), dp(44)));
+        refresh.setBackground(roundRect(PANEL, dp(12), PURPLE_DARK, dp(1)));
+        refresh.setOnClickListener(v -> {
+            if (webView != null) webView.reload();
+        });
+        bar.addView(refresh, new LinearLayout.LayoutParams(dp(48), dp(48)));
 
         return bar;
     }
@@ -205,122 +195,101 @@ public class MainActivity extends Activity {
         LinearLayout nav = new LinearLayout(this);
         nav.setOrientation(LinearLayout.HORIZONTAL);
         nav.setGravity(Gravity.CENTER);
-        nav.setPadding(dp(8), dp(7), dp(8), dp(7));
+        nav.setPadding(dp(10), dp(8), dp(10), dp(8));
         nav.setBackgroundColor(BG2);
 
-        mySharlaTab = makeNavTab("My Sharla");
-        adminTab = makeNavTab("Admin");
+        mySharlaNav = makeNavItem("●\nMy Sharla");
+        adminNav = makeNavItem("◆\nAdmin");
 
-        mySharlaTab.setOnClickListener(v -> loadSection("account"));
-        adminTab.setOnClickListener(v -> loadSection("admin"));
-
-        LinearLayout.LayoutParams tabParams = new LinearLayout.LayoutParams(0,
+        LinearLayout.LayoutParams p = new LinearLayout.LayoutParams(0,
                 LinearLayout.LayoutParams.MATCH_PARENT, 1f);
-        tabParams.setMargins(dp(4), 0, dp(4), 0);
-        nav.addView(mySharlaTab, tabParams);
-        nav.addView(adminTab, tabParams);
+        p.setMargins(dp(4), 0, dp(4), 0);
 
-        updateTabs();
+        nav.addView(mySharlaNav, p);
+        nav.addView(adminNav, p);
+
+        mySharlaNav.setOnClickListener(v -> loadSection(MY_SHARLA, "My Sharla"));
+        adminNav.setOnClickListener(v -> loadSection(ADMIN, "Admin"));
+
+        updateNavSelection("My Sharla");
         return nav;
     }
 
-    private TextView makeNavTab(String label) {
-        TextView tab = new TextView(this);
-        tab.setText(label);
-        tab.setTextSize(13);
-        tab.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
-        tab.setGravity(Gravity.CENTER);
-        tab.setPadding(dp(8), dp(6), dp(8), dp(6));
-        return tab;
+    private TextView makeNavItem(String label) {
+        TextView item = new TextView(this);
+        item.setText(label);
+        item.setGravity(Gravity.CENTER);
+        item.setTextSize(12);
+        item.setTextColor(MUTED);
+        item.setPadding(dp(8), dp(4), dp(8), dp(4));
+        item.setBackground(roundRect(Color.TRANSPARENT, dp(14), Color.TRANSPARENT, 0));
+        return item;
     }
 
-    private void loadSection(String section) {
+    private void loadSection(String url, String section) {
         currentSection = section;
-        updateTabs();
+        updateNavSelection(section);
+        sectionTitle.setText(section);
         error.setVisibility(View.GONE);
         progress.setVisibility(View.VISIBLE);
-
-        if ("admin".equals(section)) {
-            pageTitle.setText("Sharla Admin");
-            pageSubtitle.setText("Nerdhalla controls");
-            webView.loadUrl(ADMIN);
-        } else {
-            pageTitle.setText("My Sharla");
-            pageSubtitle.setText("Your Nerdhalla profile");
-            webView.loadUrl(MY_SHARLA);
-        }
+        webView.loadUrl(url);
     }
 
-    private void syncSectionFromUrl(String url) {
+    private void updateNavSelection(String section) {
+        if (mySharlaNav == null || adminNav == null) return;
+
+        boolean my = "My Sharla".equals(section);
+
+        mySharlaNav.setTextColor(my ? TEXT : MUTED);
+        mySharlaNav.setBackground(roundRect(my ? Color.rgb(55, 38, 78) : Color.TRANSPARENT,
+                dp(14), my ? PURPLE_DARK : Color.TRANSPARENT, my ? dp(1) : 0));
+
+        adminNav.setTextColor(!my ? TEXT : MUTED);
+        adminNav.setBackground(roundRect(!my ? Color.rgb(55, 38, 78) : Color.TRANSPARENT,
+                dp(14), !my ? PURPLE_DARK : Color.TRANSPARENT, !my ? dp(1) : 0));
+    }
+
+    private void updateTitleForUrl(String url) {
         if (url == null) return;
-
-        if (url.contains("/admin.html")) {
-            currentSection = "admin";
-            pageTitle.setText("Sharla Admin");
-            pageSubtitle.setText("Nerdhalla controls");
-            updateTabs();
-        } else if (url.contains("/account.html")) {
-            currentSection = "account";
-            pageTitle.setText("My Sharla");
-            pageSubtitle.setText("Your Nerdhalla profile");
-            updateTabs();
+        if (url.contains("/admin")) {
+            currentSection = "Admin";
+        } else if (url.contains("/account")) {
+            currentSection = "My Sharla";
         }
+        sectionTitle.setText(currentSection);
+        updateNavSelection(currentSection);
     }
 
-    private void updateTabs() {
-        styleTab(mySharlaTab, "account".equals(currentSection));
-        styleTab(adminTab, "admin".equals(currentSection));
-    }
-
-    private void styleTab(TextView tab, boolean active) {
-        if (tab == null) return;
-
-        GradientDrawable bg = new GradientDrawable();
-        bg.setCornerRadius(dp(14));
-
-        if (active) {
-            bg.setColor(Color.rgb(52, 36, 78));
-            bg.setStroke(dp(1), PURPLE);
-            tab.setTextColor(TEXT);
-        } else {
-            bg.setColor(BG2);
-            bg.setStroke(dp(1), LINE);
-            tab.setTextColor(MUTED);
-        }
-        tab.setBackground(bg);
-    }
-
-    private boolean isNerdhallaDashboard(String url) {
-        return url != null &&
-                url.startsWith("https://nerdhalla.net/") &&
-                (url.contains("account.html") || url.contains("admin.html"));
-    }
-
-    private void applyAppModeCss() {
-        String js = "(function(){"
-                + "var old=document.getElementById('nerdhalla-app-mode');"
-                + "if(old)old.remove();"
-                + "var s=document.createElement('style');"
-                + "s.id='nerdhalla-app-mode';"
-                + "s.innerHTML='"
-                + ".topbar{display:none!important;}"
-                + "footer,.site-footer{display:none!important;}"
-                + ".mobile-nav,.mobile-nav-backdrop{display:none!important;}"
-                + "html,body{background:#0b0811!important;margin:0!important;padding-top:0!important;}"
-                + "body{min-height:100vh!important;}"
-                + "main{padding-top:12px!important;padding-bottom:20px!important;}"
-                + ".wrap,.container{max-width:100%!important;}"
-                + "@media(max-width:700px){main{padding-left:10px!important;padding-right:10px!important;}"
-                + ".card,.panel{border-radius:14px!important;}}"
-                + "';"
-                + "document.head.appendChild(s);"
-                + "})();";
-        webView.evaluateJavascript(js, null);
+    private void applyAppStyle(WebView view) {
+        String js =
+                "(function(){" +
+                "var s=document.getElementById('nerdhalla-app-style');" +
+                "if(!s){s=document.createElement('style');s.id='nerdhalla-app-style';" +
+                "s.innerHTML='" +
+                ".topbar,body>header,footer,.site-footer,.mobile-nav,#mobile-nav,.mobile-menu,.mobile-menu-toggle{display:none!important;}" +
+                "html,body{background:#0b0811!important;margin:0!important;padding:0!important;}" +
+                "body{min-height:100vh!important;}" +
+                "main{padding-top:12px!important;padding-bottom:18px!important;}" +
+                "a,button,input,select,textarea{-webkit-tap-highlight-color:transparent;}" +
+                "';document.head.appendChild(s);}" +
+                "var v=document.querySelector('meta[name=viewport]');" +
+                "if(!v){v=document.createElement('meta');v.name='viewport';document.head.appendChild(v);}" +
+                "v.content='width=device-width,initial-scale=1,maximum-scale=1,viewport-fit=cover';" +
+                "})();";
+        view.evaluateJavascript(js, null);
     }
 
     private void showError(String message) {
-        error.setText(message + "\n\nUse the bottom tabs to retry.");
+        error.setText(message + "\n\nUse the bottom navigation to retry.");
         error.setVisibility(View.VISIBLE);
+    }
+
+    private GradientDrawable roundRect(int fill, int radius, int stroke, int strokeWidth) {
+        GradientDrawable d = new GradientDrawable();
+        d.setColor(fill);
+        d.setCornerRadius(radius);
+        if (strokeWidth > 0) d.setStroke(strokeWidth, stroke);
+        return d;
     }
 
     private int dp(int value) {
