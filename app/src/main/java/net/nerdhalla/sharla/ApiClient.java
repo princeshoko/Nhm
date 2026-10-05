@@ -25,6 +25,12 @@ public class ApiClient {
         return request(BASE + "discord-session.php", "GET", null, false);
     }
 
+    public JSONObject exchangeMobileAuth(String code) throws Exception {
+        JSONObject body = new JSONObject();
+        body.put("code", code == null ? "" : code);
+        return request(BASE + "mobile-auth-exchange.php", "POST", body, false);
+    }
+
     public JSONObject api(String action) throws Exception {
         return api(action, "GET", null, "");
     }
@@ -65,15 +71,17 @@ public class ApiClient {
         int code = conn.getResponseCode();
 
         Map<String, List<String>> headers = conn.getHeaderFields();
-        List<String> setCookies = headers.get("Set-Cookie");
-        if (setCookies == null) setCookies = headers.get("set-cookie");
-        if (setCookies != null) {
-            CookieManager cm = CookieManager.getInstance();
-            for (String value : setCookies) {
-                if (value != null) cm.setCookie(BASE, value);
+        CookieManager cm = CookieManager.getInstance();
+        for (Map.Entry<String, List<String>> entry : headers.entrySet()) {
+            String key = entry.getKey();
+            if (key == null || !"Set-Cookie".equalsIgnoreCase(key)) continue;
+            List<String> values = entry.getValue();
+            if (values == null) continue;
+            for (String value : values) {
+                if (value != null && !value.isEmpty()) cm.setCookie(BASE, value);
             }
-            cm.flush();
         }
+        cm.flush();
 
         InputStream in = code >= 200 && code < 400 ? conn.getInputStream() : conn.getErrorStream();
         StringBuilder sb = new StringBuilder();
