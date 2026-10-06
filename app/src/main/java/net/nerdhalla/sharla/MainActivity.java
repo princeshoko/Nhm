@@ -737,6 +737,9 @@ public class MainActivity extends Activity {
         profile.addView(statLine("Activity Tier", p.optString("tier", "Newcomer 🆕")));
         profile.addView(statLine("Messages", fmt(p.optLong("count", 0))));
         profile.addView(statLine("Horse Tokens", fmt(p.optLong("horse_tokens", 0)) + " 🪙"));
+        profile.addView(statLine(
+                "Collection",
+                stats.optInt("unique_items", 0) + " unique items"));
 
         JSONObject loot = meData.optJSONObject("loot");
 
@@ -883,14 +886,6 @@ public class MainActivity extends Activity {
         });
 
         c.addView(profile, cardParams());
-
-        LinearLayout collection = card();
-        collection.addView(sectionTitle("Collection"));
-        collection.addView(bigStat(String.valueOf(stats.optInt("unique_items", 0)), "unique items"));
-        collection.addView(statLine("Total items", String.valueOf(stats.optInt("total_items", 0))));
-        collection.addView(statLine("Duplicates", String.valueOf(stats.optInt("duplicate_items", 0))));
-        collection.addView(statLine("Duplicate pawn value", stats.optInt("duplicate_sell_value", 0) + " 🪙"));
-        c.addView(collection, cardParams());
 
         return wrapScroll(c);
     }
