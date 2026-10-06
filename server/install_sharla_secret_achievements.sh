@@ -751,120 +751,117 @@ from pathlib import Path
 p=Path('sharla_web_portal.py')
 s=p.read_text()
 
-# Portal import.
-marker='import discord\n'
-addition='''from secret_achievements import (
+portal_import='''from secret_achievements import (
     merge_secret_portal_achievements,
     record_secret_loot,
     record_secret_shop_purchase,
 )
 '''
-if addition not in s:
+if portal_import not in s:
+    marker='import discord\n'
     if marker not in s:
         raise SystemExit('portal import marker not found')
-    s=s.replace(marker, marker+addition, 1)
+    s=s.replace(marker, marker+portal_import, 1)
 
-# Make the achievement ledger rows variable safe across old and new portal layouts.
-portal_me_start = s.find('async def portal_me(request):')
-if portal_me_start < 0:
-    raise SystemExit('portal_me function not found')
-portal_me_end = s.find('\nasync def ', portal_me_start + 1)
-if portal_me_end < 0:
-    portal_me_end = len(s)
-portal_me = s[portal_me_start:portal_me_end]
 
-if 'rows = {}' not in portal_me:
-    ach_marker = '    achievements = []\n'
-    pos = portal_me.find(ach_marker)
-    if pos < 0:
+def portal_section(text, name):
+    start=text.find(f'async def {name}(request):')
+    if start < 0:
+        raise SystemExit(f'{name} function not found')
+    end=text.find('\nasync def ', start+1)
+    if end < 0:
+        end=len(text)
+    return start, end, text[start:end]
+
+
+# Merge the ten secret cards into /portal/me without disturbing the newer
+# earned-date/shop/homeworld fields surrounding the achievement ledger.
+start, end, sec = portal_section(s, 'portal_me')
+if '    rows = {}\n' not in sec:
+    marker='    achievements = []\n'
+    if marker not in sec:
         raise SystemExit('portal achievements list marker not found')
-    portal_me = (
-        portal_me[:pos]
-        + ach_marker
-        + '    rows = {}\n'
-        + portal_me[pos + len(ach_marker):]
-    )
+    sec=sec.replace(marker, marker+'    rows = {}\n', 1)
 
-merge_block = '''    achievements = merge_secret_portal_achievements(
+if 'merge_secret_portal_achievements(' not in sec:
+    anchor='    profile = {\n'
+    if anchor not in sec:
+        raise SystemExit('portal profile marker not found')
+    merge='''    achievements = merge_secret_portal_achievements(
         achievements,
         rows,
     )
 
 '''
-if 'merge_secret_portal_achievements(' not in portal_me:
-    profile_anchor = '    profile = {\n'
-    pos = portal_me.find(profile_anchor)
-    if pos < 0:
-        raise SystemExit('portal profile marker not found')
-    portal_me = portal_me[:pos] + merge_block + portal_me[pos:]
+    sec=sec.replace(anchor, merge+anchor, 1)
 
-s = s[:portal_me_start] + portal_me + s[portal_me_end:]
+s=s[:start]+sec+s[end:]
 
-# Portal/app loot claims count toward history-based secret achievements.
-loot_start = s.find('async def portal_loot(request):')
-if loot_start < 0:
-    raise SystemExit('portal_loot function not found')
-loot_end = s.find('\nasync def ', loot_start + 1)
-if loot_end < 0:
-    loot_end = len(s)
-loot_section = s[loot_start:loot_end]
 
-secret_loot_block = '''        try:
-            await record_secret_loot(
-                bot,
-                user_id,
-                rarity,
-                last_claim,
-                current_time=now,
-                cooldown=cooldown,
-                notify_target=None,
-            )
-        except Exception:
-            pass
-
-'''
-if 'record_secret_loot(' not in loot_section:
-    # Newer portal formatting splits getattr() across lines, while older
-    # versions kept it on one line. Anchor on the challenge_fn assignment.
-    pos = loot_section.find('        challenge_fn = getattr')
-    if pos < 0:
-        raise SystemExit('portal loot challenge marker not found')
-    loot_section = (
-        loot_section[:pos]
-        + secret_loot_block
-        + loot_section[pos:]
+# Count app/web loot claims toward the history-based secret achievements.
+# Insert at function scope, after the normal Discord-equivalent bookkeeping,
+# rather than inside its nested try/if blocks.
+start, end, sec = portal_section(s, 'portal_loot')
+if 'record_secret_loot(' not in sec:
+    anchors=(
+        '    # Progression rewards may have changed tokens.\n',
+        '    # Achievement/challenge rewards may have changed the token balance.\n',
     )
+    pos=-1
+    for anchor in anchors:
+        pos=sec.find(anchor)
+        if pos >= 0:
+            break
+    if pos < 0:
+        pos=sec.rfind('    await _persist(bot)\n')
+    if pos < 0:
+        raise SystemExit('portal loot final bookkeeping marker not found')
 
-s = s[:loot_start] + loot_section + s[loot_end:]
+    block='''    try:
+        await record_secret_loot(
+            bot,
+            user_id,
+            rarity,
+            last_claim,
+            current_time=now,
+            cooldown=cooldown,
+            notify_target=None,
+        )
+    except Exception:
+        pass
 
-# Web Sharla Shop purchases count toward Sharla's Favorite Customer.
-shop_start = s.find('async def portal_shop_purchase(request):')
+'''
+    sec=sec[:pos]+block+sec[pos:]
+
+s=s[:start]+sec+s[end:]
+
+
+# Count successful web-shop purchases. Put this immediately before the final
+# successful response at function scope so we cannot split an existing try.
+shop_start=s.find('async def portal_shop_purchase(request):')
 if shop_start >= 0:
-    shop_end = s.find('\nasync def ', shop_start + 1)
+    shop_end=s.find('\nasync def ', shop_start+1)
     if shop_end < 0:
-        shop_end = len(s)
-    shop_section = s[shop_start:shop_end]
+        shop_end=len(s)
+    sec=s[shop_start:shop_end]
 
-    if 'record_secret_shop_purchase(' not in shop_section:
-        needle='''            shop_purchases=1,
+    if 'record_secret_shop_purchase(' not in sec:
+        pos=sec.rfind('    return web.json_response')
+        if pos < 0:
+            raise SystemExit('portal shop success response marker not found')
+        block='''    try:
+        await record_secret_shop_purchase(
+            bot,
+            user_id,
+            None,
         )
-'''
-        shop_patch='''            shop_purchases=1,
-        )
+    except Exception:
+        pass
 
-        try:
-            await record_secret_shop_purchase(
-                bot,
-                user_id,
-                None,
-            )
-        except Exception:
-            pass
 '''
-        if needle in shop_section:
-            shop_section = shop_section.replace(needle, shop_patch, 1)
+        sec=sec[:pos]+block+sec[pos:]
 
-    s = s[:shop_start] + shop_section + s[shop_end:]
+    s=s[:shop_start]+sec+s[shop_end:]
 
 p.write_text(s)
 print('patched portal')
