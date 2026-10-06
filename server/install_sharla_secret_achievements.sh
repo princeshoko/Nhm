@@ -753,8 +753,6 @@ s=p.read_text()
 
 portal_import='''from secret_achievements import (
     merge_secret_portal_achievements,
-    record_secret_loot,
-    record_secret_shop_purchase,
 )
 '''
 if portal_import not in s:
@@ -763,20 +761,14 @@ if portal_import not in s:
         raise SystemExit('portal import marker not found')
     s=s.replace(marker, marker+portal_import, 1)
 
+start=s.find('async def portal_me(request):')
+if start < 0:
+    raise SystemExit('portal_me function not found')
+end=s.find('\nasync def ', start+1)
+if end < 0:
+    end=len(s)
+sec=s[start:end]
 
-def portal_section(text, name):
-    start=text.find(f'async def {name}(request):')
-    if start < 0:
-        raise SystemExit(f'{name} function not found')
-    end=text.find('\nasync def ', start+1)
-    if end < 0:
-        end=len(text)
-    return start, end, text[start:end]
-
-
-# Merge the ten secret cards into /portal/me without disturbing the newer
-# earned-date/shop/homeworld fields surrounding the achievement ledger.
-start, end, sec = portal_section(s, 'portal_me')
 if '    rows = {}\n' not in sec:
     marker='    achievements = []\n'
     if marker not in sec:
@@ -796,50 +788,6 @@ if 'merge_secret_portal_achievements(' not in sec:
     sec=sec.replace(anchor, merge+anchor, 1)
 
 s=s[:start]+sec+s[end:]
-
-
-# Count app/web loot claims toward the history-based secret achievements.
-# Insert at function scope, after the normal Discord-equivalent bookkeeping,
-# rather than inside its nested try/if blocks.
-start, end, sec = portal_section(s, 'portal_loot')
-if 'record_secret_loot(' not in sec:
-    anchors=(
-        '    # Progression rewards may have changed tokens.\n',
-        '    # Achievement/challenge rewards may have changed the token balance.\n',
-    )
-    pos=-1
-    for anchor in anchors:
-        pos=sec.find(anchor)
-        if pos >= 0:
-            break
-    if pos < 0:
-        pos=sec.rfind('    await _persist(bot)\n')
-    if pos < 0:
-        raise SystemExit('portal loot final bookkeeping marker not found')
-
-    block='''    try:
-        await record_secret_loot(
-            bot,
-            user_id,
-            rarity,
-            last_claim,
-            current_time=now,
-            cooldown=cooldown,
-            notify_target=None,
-        )
-    except Exception:
-        pass
-
-'''
-    sec=sec[:pos]+block+sec[pos:]
-
-s=s[:start]+sec+s[end:]
-
-
-# Web-shop purchase tracking is intentionally skipped here.
-# The core secret achievement engine and Discord shop tracking are installed
-# first. This avoids modifying the newer portal_shop_purchase function until
-# its exact live layout is inspected separately.
 
 p.write_text(s)
 print('patched portal')
