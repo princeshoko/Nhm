@@ -982,7 +982,7 @@ public class MainActivity extends Activity {
                     String rarity = result.optString("rarity", "Loot");
                     String item = result.optString("item", "item");
                     applyLootResultLocally(result, rarity, item);
-                    toast("🎁 " + item + " [" + rarity + "] • +1 Horse Token");
+                    toast(lootIcon(item) + " " + item + " [" + rarity + "] • +1 Horse Token");
                     renderMySharla();
                 });
             } catch (Exception e) {
@@ -1170,7 +1170,7 @@ public class MainActivity extends Activity {
             LinearLayout details = new LinearLayout(this);
             details.setOrientation(LinearLayout.VERTICAL);
 
-            TextView itemName = text(name, 15, TEXT, true);
+            TextView itemName = text(lootIcon(name) + " " + name, 15, TEXT, true);
             details.addView(itemName);
 
             String meta = rarity + "  •  " + price + " 🪙  •  Owned ×" + owned;
@@ -1781,7 +1781,7 @@ public class MainActivity extends Activity {
             itemCard.setPadding(dp(12), dp(7), dp(8), dp(7));
 
             TextView name = text(
-                    item.optString("name", "Item"),
+                    lootIcon(item.optString("name", "Item")) + " " + item.optString("name", "Item"),
                     15,
                     rarityColor(rarity),
                     true);
@@ -5392,6 +5392,98 @@ public class MainActivity extends Activity {
     private String record(JSONObject x) {
         if (x == null) return "0W • 0L • 0D";
         return x.optInt("wins", 0) + "W • " + x.optInt("losses", 0) + "L • " + x.optInt("draws", 0) + "D";
+    }
+
+
+    private String lootIcon(String name) {
+        if (name == null) return "🎁";
+        switch (name) {
+            case "Sticky Tool": return "🛠️";
+            case "Pocket Sand": return "🏖️";
+            case "Broken Sword": return "🗡️";
+            case "Slightly Used Potion": return "🧪";
+            case "Empty Can": return "🥫";
+            case "Soggy Pizza": return "🍕";
+            case "Piece of Chalk": return "🖍️";
+            case "Rusty Key": return "🔑";
+            case "Stiff Sock": return "🧦";
+            case "Tangled Headphone Cord": return "🎧";
+            case "Expired Coupon for Tacos": return "🌮";
+            case "Bent Paperclip": return "📎";
+            case "Dull Pencil": return "✏️";
+            case "Crushed Energy Drink": return "🥤";
+            case "Sticky Coin": return "🪙";
+            case "Feather of a Boring Bird": return "🪶";
+            case "Warm Bottle of Water": return "💧";
+            case "Chewed Pen Cap": return "🖊️";
+            case "Broken Rubber Band": return "🪢";
+            case "Faded Lube Receipt": return "🧾";
+            case "Lead Spoon": return "🥄";
+            case "Stray Button": return "🔘";
+            case "Empty Box": return "📦";
+            case "Scratched CD": return "💿";
+            case "Slightly Moist Towel": return "🧻";
+            case "+1 Dagger of Butter Cutting": return "🧈";
+            case "Lucky Gaming Socks": return "🍀";
+            case "Trading Card": return "🃏";
+            case "Suspicious Meatball": return "🍝";
+            case "Glowing Mushroom": return "🍄";
+            case "Scroll of Minor Itching": return "📜";
+            case "Potion of Mild Refreshment": return "🥤";
+            case "Silver Coin": return "🪙";
+            case "Butt Cushion": return "🍑";
+            case "eGirl Body Pillow": return "🛏️";
+            case "Rainbow Potion": return "🌈";
+            case "Magic Sock": return "🪄";
+            case "Polished Gemstone": return "💎";
+            case "Herb Blend": return "🌿";
+            case "Herb Grinder": return "⚙️";
+            case "Herb": return "🌱";
+            case "Brazillian Wax": return "🕯️";
+            case "Melted Spatula": return "🍳";
+            case "Signed Comic Book": return "📚";
+            case "Mana Toast": return "🍞";
+            case "Ring of Mild Discomfort": return "💍";
+            case "Potion of Worms": return "🪱";
+            case "Staff of Flashlight": return "🔦";
+            case "Boots of Feather Falling": return "👢";
+            case "Amulet of Mind Reading (Cats Only)": return "🐈";
+            case "Shield of Hemorids": return "🛡️";
+            case "Brown Eye of Agamotto": return "👁️";
+            case "Wand of xSploogesion": return "🪄";
+            case "Golden D20": return "🎲";
+            case "Deck of Mild Things": return "🃏";
+            case "Crown of the Sepsis Whore": return "👑";
+            case "Mind Stone": return "🟡";
+            case "Space Stone": return "🔵";
+            case "Reality Stone": return "🔴";
+            case "Power Stone": return "🟣";
+            case "Time Stone": return "🟢";
+            case "Soul Stone": return "🟠";
+            case "Phoenix Feather Wand": return "🪶";
+            case "Expired Condom": return "📅";
+            case "Sinfinity Gauntlet": return "🧤";
+            case "Finfinity Gauntlet": return "🐟";
+            case "Ginfinity Gauntlet": return "🍸";
+            case "Chimichanga of Destiny": return "🌯";
+            case "Pinfinity Gauntlet": return "🅿️";
+            case "Rainbow Horn": return "🦄";
+            case "Innfinity Gauntlet": return "🏨";
+            case "Kinfinity Gauntlet": return "🧍🧤";
+            case "Hugh Jackman Photo, Shirtless": return "📸";
+            case "Tinfinity Gauntlet": return "🥫🧤";
+            case "Autographed Sock": return "✍️🧦";
+            case "Old used sack": return "👜";
+            case "The Kinky Hose": return "🧦";
+            case "Fist full of water": return "✊💧";
+            case "Photo of Thanos blowing kisses": return "😘";
+            case "Hand-Carved Wooden Log": return "🪵";
+            case "Infinity Gauntlet": return "🧤";
+            case "Taco of Desitiny": return "🌮";
+            case "Booger Sugar": return "❄️";
+            case "White Pants": return "🤍";
+            default: return "🎁";
+        }
     }
 
     private int tokenValue(String rarity) {
