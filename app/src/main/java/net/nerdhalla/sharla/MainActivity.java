@@ -925,11 +925,35 @@ public class MainActivity extends Activity {
         if (lastLootItem.isEmpty()) {
             lastLootBox.addView(text("No loot claimed on this device yet.", 13, MUTED, false));
         } else {
-            lastLootBox.addView(text(
-                    lootIcon(lastLootItem) + " " + lastLootItem,
+            boolean customLastLoot = isCustomInventoryItem(lastLootItem);
+
+            LinearLayout lastLootItemRow = new LinearLayout(this);
+            lastLootItemRow.setOrientation(LinearLayout.HORIZONTAL);
+            lastLootItemRow.setGravity(Gravity.CENTER_VERTICAL);
+
+            if (customLastLoot) {
+                ImageView customLastLootIcon = new ImageView(this);
+                customLastLootIcon.setImageResource(R.drawable.custom_item_icon);
+                customLastLootIcon.setScaleType(ImageView.ScaleType.CENTER_INSIDE);
+
+                LinearLayout.LayoutParams customLastLootIconParams =
+                        new LinearLayout.LayoutParams(dp(30), dp(30));
+                customLastLootIconParams.rightMargin = dp(8);
+                lastLootItemRow.addView(customLastLootIcon, customLastLootIconParams);
+            }
+
+            lastLootItemRow.addView(text(
+                    (customLastLoot ? "" : lootIcon(lastLootItem) + " ") + lastLootItem,
                     15,
                     TEXT,
-                    true));
+                    true),
+                    new LinearLayout.LayoutParams(
+                            0,
+                            ViewGroup.LayoutParams.WRAP_CONTENT,
+                            1f));
+
+            lastLootBox.addView(lastLootItemRow);
+
             if (!lastLootRarity.isEmpty()) {
                 lastLootBox.addView(text(
                         lastLootRarity,
