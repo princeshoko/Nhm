@@ -1365,7 +1365,7 @@ public class MainActivity extends Activity {
         if (recent != null && recent.length() > 0) {
             card.addView(spacer(10));
             card.addView(sectionTitle("Recent"));
-            for (int i = 0; i < Math.min(3, recent.length()); i++) {
+            for (int i = 0; i < Math.min(4, recent.length()); i++) {
                 JSONObject x = recent.optJSONObject(i);
                 if (x != null) {
                     card.addView(text("• " + x.optString("result", "Result") + " vs " + x.optString("opponent", "opponent"), 14, MUTED, false));
@@ -1633,30 +1633,174 @@ public class MainActivity extends Activity {
 
     private View renderAchievementsPage() {
         LinearLayout c = scrollColumn();
-        c.addView(pageHeading("Achievements", "Your unlocked Sharla achievements."));
+        c.addView(pageHeading(
+                "Achievements",
+                "Unlocked achievements and progress you have already started."));
 
         JSONArray arr = meData.optJSONArray("achievements");
         if (arr == null || arr.length() == 0) {
-            c.addView(infoCard("Achievements", "No recorded achievements yet."));
+            c.addView(infoCard(
+                    "Achievements",
+                    "No unlocked or in-progress achievements yet."));
             return wrapScroll(c);
         }
 
+        int shown = 0;
+
         for (int i = 0; i < arr.length(); i++) {
-            JSONObject a = arr.optJSONObject(i);
-            if (a == null) continue;
-            LinearLayout card = card();
-            card.addView(text("🏆 " + a.optString("name", a.optString("key", "Achievement")), 17, GOLD, true));
-            String unlocked = a.optString("unlocked_at", "");
-            if (!unlocked.isEmpty()) card.addView(text("Unlocked " + unlocked, 13, MUTED, false));
-            String desc = a.optString("description", "");
-            if (!desc.isEmpty()) {
-                TextView d = text(desc, 14, TEXT, false);
-                d.setPadding(0, dp(8), 0, 0);
-                card.addView(d);
+            JSONObject achievement = arr.optJSONObject(i);
+            if (achievement == null) continue;
+
+            boolean hasLiveUnlocked = achievement.has("unlocked");
+            boolean unlocked = hasLiveUnlocked
+                    ? achievement.optBoolean("unlocked", false)
+                    : true; // Old portal payloads only contained earned ledger rows.
+
+            boolean hasCurrent = achievement.has("current")
+                    && !achievement.isNull("current");
+            boolean hasTarget = achievement.has("target")
+                    && !achievement.isNull("target");
+
+            double current = hasCurrent ? achievement.optDouble("current", 0) : 0;
+            double target = hasTarget ? achievement.optDouble("target", 0) : 0;
+            boolean started = hasCurrent && hasTarget && target > 0 && current > 0;
+
+            if (!unlocked && !started) continue;
+
+            String key = achievement.optString("key", "");
+            String name = achievement.optString("name", "");
+            if (name.isEmpty() || name.equals(key)) {
+                name = achievementDisplayName(key);
             }
-            c.addView(card, cardParams());
+
+            String emoji = achievement.optString("emoji", "");
+            if (emoji.isEmpty()) emoji = achievementEmoji(key);
+
+            LinearLayout itemCard = card();
+            itemCard.setPadding(dp(12), dp(8), dp(12), dp(8));
+
+            LinearLayout top = new LinearLayout(this);
+            top.setOrientation(LinearLayout.HORIZONTAL);
+            top.setGravity(Gravity.CENTER_VERTICAL);
+
+            TextView title = text(
+                    (emoji.isEmpty() ? "" : emoji + " ") + name,
+                    15,
+                    unlocked ? GOLD : TEXT,
+                    true);
+            top.addView(
+                    title,
+                    new LinearLayout.LayoutParams(
+                            0,
+                            ViewGroup.LayoutParams.WRAP_CONTENT,
+                            1f));
+
+            if (unlocked) {
+                TextView done = text("✓", 15, GREEN, true);
+                done.setGravity(Gravity.CENTER);
+                top.addView(done, new LinearLayout.LayoutParams(dp(28), dp(28)));
+            }
+
+            itemCard.addView(top);
+
+            if (hasCurrent && hasTarget && target > 0) {
+                double percent = achievement.has("percent")
+                        ? achievement.optDouble("percent", 0)
+                        : Math.min(100.0, (current / target) * 100.0);
+
+                String progressText = formatAchievementNumber(current)
+                        + " / " + formatAchievementNumber(target)
+                        + "  •  " + trim1(percent) + "%";
+
+                TextView progress = text(
+                        progressText,
+                        12,
+                        unlocked ? GREEN : PURPLE,
+                        false);
+                progress.setPadding(0, dp(3), 0, 0);
+                itemCard.addView(progress);
+            }
+
+            String desc = achievement.optString("description", "");
+            if (!desc.isEmpty()) {
+                TextView description = text(desc, 12, MUTED, false);
+                description.setPadding(0, dp(3), 0, 0);
+                itemCard.addView(description);
+            }
+
+            LinearLayout.LayoutParams compact = cardParams();
+            compact.topMargin = dp(2);
+            compact.bottomMargin = dp(2);
+            c.addView(itemCard, compact);
+            shown++;
         }
+
+        if (shown == 0) {
+            c.addView(infoCard(
+                    "Achievements",
+                    "No unlocked or in-progress achievements yet."));
+        }
+
         return wrapScroll(c);
+    }
+
+    private String formatAchievementNumber(double value) {
+        if (Math.rint(value) == value) {
+            return fmt((long) value);
+        }
+        return trim1(value);
+    }
+
+    private String achievementDisplayName(String key) {
+        switch (key) {
+            case "first_find": return "First Find";
+            case "unique_10": return "Collector I";
+            case "unique_25": return "Collector II";
+            case "unique_50": return "Collector III";
+            case "complete_common": return "Common Knowledge";
+            case "complete_uncommon": return "Uncommonly Dedicated";
+            case "complete_rare": return "Rare Specimen";
+            case "complete_legendary": return "Legendary Collector";
+            case "complete_mythic": return "Mythic Completionist";
+            case "loot_master": return "Loot Master";
+            case "first_shop": return "Window Shopper No More";
+            case "shop_half": return "Exclusive Taste";
+            case "shop_complete": return "Sharla's Favorite Customer";
+            case "duplicates_5": return "Pack Rat";
+            case "duplicates_20": return "Hoarder";
+            case "stack_5": return "Why Do You Have Five of These?";
+            case "tokens_100": return "Pocket Change";
+            case "tokens_500": return "Horse Token Hoarder";
+            case "tokens_1000": return "Sharla's Bank";
+            default:
+                if (key == null || key.isEmpty()) return "Achievement";
+                return key.replace('_', ' ');
+        }
+    }
+
+    private String achievementEmoji(String key) {
+        switch (key) {
+            case "first_find": return "🎁";
+            case "unique_10": return "🧩";
+            case "unique_25": return "🏺";
+            case "unique_50": return "🏆";
+            case "complete_common": return "⚪";
+            case "complete_uncommon": return "🟢";
+            case "complete_rare": return "🔵";
+            case "complete_legendary": return "🟠";
+            case "complete_mythic": return "🟣";
+            case "loot_master": return "👑";
+            case "first_shop": return "🛍️";
+            case "shop_half": return "💎";
+            case "shop_complete": return "🛒";
+            case "duplicates_5": return "📦";
+            case "duplicates_20": return "🗃️";
+            case "stack_5": return "🫠";
+            case "tokens_100": return "🪙";
+            case "tokens_500": return "🐴";
+            case "tokens_1000": return "🏦";
+            default: return "🏆";
+        }
     }
 
     private void loadAdmin() {
