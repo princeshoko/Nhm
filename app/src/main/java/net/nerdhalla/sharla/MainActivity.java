@@ -208,7 +208,7 @@ public class MainActivity extends Activity {
 
         if ("my".equals(currentTop)) {
             if (meData == null) return;
-            List<String> keys = list("profile", "homeworlds", "inventory", "achievements");
+            List<String> keys = list("profile", "shop", "homeworlds", "inventory", "achievements");
             int current = keys.indexOf(currentMySection);
             if (current < 0) current = 0;
             int next = Math.floorMod(current + direction, keys.size());
@@ -653,6 +653,9 @@ public class MainActivity extends Activity {
 
         View page;
         switch (currentMySection) {
+            case "shop":
+                page = renderShopPage();
+                break;
             case "homeworlds":
                 page = renderHomeworldsPage();
                 break;
@@ -678,6 +681,7 @@ public class MainActivity extends Activity {
         row.setPadding(dp(10), dp(10), dp(10), dp(8));
         String[][] tabs = {
                 {"profile", "🦄 Profile"},
+                {"shop", "🛍️ Sharla Shop"},
                 {"homeworlds", "🌌 Homeworlds"},
                 {"inventory", "🎒 Inventory"},
                 {"achievements", "🏆 Achievements"}
@@ -851,10 +855,9 @@ public class MainActivity extends Activity {
                     showBusy(false);
                     String rarity = result.optString("rarity", "Loot");
                     String item = result.optString("item", "item");
+                    applyLootResultLocally(result, rarity, item);
                     toast("🎁 " + item + " [" + rarity + "] • +1 Horse Token");
-                    meData = null;
-                    meDataFetchedElapsed = 0L;
-                    loadMySharla();
+                    renderMySharla();
                 });
             } catch (Exception e) {
                 main.post(() -> {
@@ -866,6 +869,167 @@ public class MainActivity extends Activity {
                 });
             }
         });
+    }
+
+    private void applyLootResultLocally(JSONObject result, String rarity, String itemName) {
+        if (meData == null) return;
+
+        JSONObject loot = meData.optJSONObject("loot");
+        if (loot == null) {
+            loot = new JSONObject();
+            try { meData.put("loot", loot); } catch (Exception ignored) {}
+        }
+
+        long now = result.optLong("server_time", System.currentTimeMillis() / 1000L);
+        long cooldown = result.optLong("cooldown_seconds", 43200L);
+        long remaining = result.optLong("remaining_seconds", cooldown);
+
+        try {
+            loot.put("ready", false);
+            loot.put("last_loot", result.optLong("last_loot", now));
+            loot.put("next_loot", result.optLong("next_loot", now + cooldown));
+            loot.put("cooldown_seconds", cooldown);
+            loot.put("remaining_seconds", remaining);
+            loot.put("server_time", now);
+        } catch (Exception ignored) {}
+
+        JSONObject profile = meData.optJSONObject("profile");
+        if (profile != null && result.has("horse_tokens")) {
+            try { profile.put("horse_tokens", result.optLong("horse_tokens", profile.optLong("horse_tokens", 0))); }
+            catch (Exception ignored) {}
+        }
+
+        JSONArray inventory = meData.optJSONArray("inventory");
+        boolean found = false;
+        if (inventory != null) {
+            for (int i = 0; i < inventory.length(); i++) {
+                JSONObject entry = inventory.optJSONObject(i);
+                if (entry == null) continue;
+                if (rarity.equals(entry.optString("rarity", "")) &&
+                        itemName.equals(entry.optString("name", ""))) {
+                    try { entry.put("quantity", entry.optInt("quantity", 0) + 1); }
+                    catch (Exception ignored) {}
+                    found = true;
+                    break;
+                }
+            }
+            if (!found) {
+                JSONObject entry = new JSONObject();
+                try {
+                    entry.put("rarity", rarity);
+                    entry.put("name", itemName);
+                    entry.put("quantity", 1);
+                    inventory.put(entry);
+                } catch (Exception ignored) {}
+            }
+        }
+
+        JSONObject stats = meData.optJSONObject("stats");
+        if (stats != null) {
+            try {
+                stats.put("total_items", stats.optInt("total_items", 0) + 1);
+                if (found) {
+                    stats.put("duplicate_items", stats.optInt("duplicate_items", 0) + 1);
+                    stats.put("duplicate_sell_value",
+                            stats.optInt("duplicate_sell_value", 0) + tokenValue(rarity));
+                } else {
+                    stats.put("unique_items", stats.optInt("unique_items", 0) + 1);
+                }
+            } catch (Exception ignored) {}
+        }
+
+        meDataFetchedElapsed = SystemClock.elapsedRealtime();
+    }
+
+    private View renderShopPage() {
+        LinearLayout c = scrollColumn();
+        c.addView(pageHeading("Sharla Shop", "Spend Horse Tokens on Sharla Shop Exclusives."));
+
+        JSONObject shop = meData.optJSONObject("shop");
+        if (shop == null || !shop.optBoolean("available", false)) {
+            c.addView(infoCard("Sharla Shop", "Shop data is not available from Sharla yet."));
+            return wrapScroll(c);
+        }
+
+        LinearLayout hero = card();
+        LinearLayout top = new LinearLayout(this);
+        top.setGravity(Gravity.CENTER_VERTICAL);
+
+        ImageView sharla = new ImageView(this);
+        sharla.setImageResource(R.drawable.nerdhalla_icon);
+        sharla.setScaleType(ImageView.ScaleType.CENTER_CROP);
+        sharla.setBackground(roundRect(PANEL2, 18, LINE, 1));
+        top.addView(sharla, new LinearLayout.LayoutParams(dp(82), dp(82)));
+
+        String avatarUrl = shop.optString("avatar_url", "");
+        if (!avatarUrl.isEmpty()) loadImage(avatarUrl, sharla);
+
+        LinearLayout info = new LinearLayout(this);
+        info.setOrientation(LinearLayout.VERTICAL);
+        info.setPadding(dp(14), 0, 0, 0);
+        info.addView(text("Sharla's Horse Token Shop", 20, TEXT, true));
+        info.addView(text("Exclusive collectibles", 13, MUTED, false));
+        top.addView(info, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+        hero.addView(top);
+
+        hero.addView(spacer(12));
+        hero.addView(statLine("Horse Tokens", fmt(shop.optLong("balance", 0)) + " 🪙"));
+        hero.addView(statLine(
+                "Shop Collection",
+                shop.optInt("owned_unique", 0) + "/" + shop.optInt("total", 0) +
+                        " • " + trim1(shop.optDouble("completion", 0)) + "%"));
+        c.addView(hero, cardParams());
+
+        JSONArray items = shop.optJSONArray("items");
+        if (items == null || items.length() == 0) {
+            c.addView(infoCard("Shop", "No shop items are available right now."));
+            return wrapScroll(c);
+        }
+
+        long balance = shop.optLong("balance", 0);
+        for (int i = 0; i < items.length(); i++) {
+            JSONObject item = items.optJSONObject(i);
+            if (item == null) continue;
+
+            String rarity = item.optString("rarity", "Rare");
+            String name = item.optString("name", "Shop Item");
+            int price = item.optInt("price", tokenValue(rarity) * 30);
+            int owned = item.optInt("owned", 0);
+
+            LinearLayout itemCard = card();
+            itemCard.addView(text(name, 17, TEXT, true));
+            itemCard.addView(text(rarity + " • Shop Exclusive", 13, MUTED, false));
+            itemCard.addView(statLine("Price", price + " 🪙"));
+            itemCard.addView(statLine("Owned", "×" + owned));
+
+            Button buy = primaryButton(balance >= price ? "Buy for " + price + " 🪙" : "Need " + (price - balance) + " more 🪙");
+            buy.setEnabled(balance >= price);
+            itemCard.addView(buy, buttonParams());
+
+            buy.setOnClickListener(v -> confirm(
+                    "Buy " + name + "?",
+                    "Purchase this " + rarity + " Shop Exclusive for " + price +
+                            " Horse Tokens? You currently own ×" + owned + ".",
+                    () -> {
+                        JSONObject body = new JSONObject();
+                        try {
+                            body.put("rarity", rarity);
+                            body.put("item", name);
+                        } catch (Exception ignored) {}
+
+                        post("shop_purchase", body, result -> {
+                            toast("🛍️ Purchased " + result.optString("item", name) +
+                                    " for " + result.optInt("price", price) + " Horse Tokens.");
+                            meData = null;
+                            meDataFetchedElapsed = 0L;
+                            loadMySharla();
+                        });
+                    }));
+
+            c.addView(itemCard, cardParams());
+        }
+
+        return wrapScroll(c);
     }
 
     private View renderHomeworldsPage() {
