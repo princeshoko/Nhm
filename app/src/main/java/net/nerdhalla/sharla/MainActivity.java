@@ -997,14 +997,35 @@ public class MainActivity extends Activity {
             int owned = item.optInt("owned", 0);
 
             LinearLayout itemCard = card();
-            itemCard.addView(text(name, 17, TEXT, true));
-            itemCard.addView(text(rarity + " • Shop Exclusive", 13, MUTED, false));
-            itemCard.addView(statLine("Price", price + " 🪙"));
-            itemCard.addView(statLine("Owned", "×" + owned));
+            itemCard.setPadding(dp(12), dp(9), dp(10), dp(9));
 
-            Button buy = primaryButton(balance >= price ? "Buy for " + price + " 🪙" : "Need " + (price - balance) + " more 🪙");
+            LinearLayout row = new LinearLayout(this);
+            row.setOrientation(LinearLayout.HORIZONTAL);
+            row.setGravity(Gravity.CENTER_VERTICAL);
+
+            LinearLayout details = new LinearLayout(this);
+            details.setOrientation(LinearLayout.VERTICAL);
+
+            TextView itemName = text(name, 15, TEXT, true);
+            details.addView(itemName);
+
+            String meta = rarity + "  •  " + price + " 🪙  •  Owned ×" + owned;
+            details.addView(text(meta, 12, MUTED, false));
+
+            row.addView(details, new LinearLayout.LayoutParams(
+                    0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+
+            Button buy = primaryButton(balance >= price ? "Buy" : "Need " + (price - balance));
             buy.setEnabled(balance >= price);
-            itemCard.addView(buy, buttonParams());
+            buy.setPadding(dp(8), 0, dp(8), 0);
+            buy.setTextSize(12);
+
+            LinearLayout.LayoutParams buyParams =
+                    new LinearLayout.LayoutParams(dp(92), dp(38));
+            buyParams.leftMargin = dp(10);
+            row.addView(buy, buyParams);
+
+            itemCard.addView(row);
 
             buy.setOnClickListener(v -> confirm(
                     "Buy " + name + "?",
@@ -1026,7 +1047,10 @@ public class MainActivity extends Activity {
                         });
                     }));
 
-            c.addView(itemCard, cardParams());
+            LinearLayout.LayoutParams compactCard = cardParams();
+            compactCard.topMargin = dp(3);
+            compactCard.bottomMargin = dp(3);
+            c.addView(itemCard, compactCard);
         }
 
         return wrapScroll(c);
