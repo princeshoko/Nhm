@@ -2990,10 +2990,42 @@ public class MainActivity extends Activity {
                 holder.removeAllViews();
 
                 if (finalHealth != null) {
-                    holder.addView(botHealthCard("Sharla", finalHealth.optJSONObject("sharla"), true));
-                    holder.addView(spacer(12));
-                    holder.addView(botHealthCard("Head Pool", finalHealth.optJSONObject("headpool"), false));
-                    holder.addView(spacer(12));
+                    LinearLayout botRow = new LinearLayout(this);
+                    botRow.setOrientation(LinearLayout.HORIZONTAL);
+                    botRow.setGravity(Gravity.TOP);
+
+                    LinearLayout.LayoutParams botLeftParams =
+                            new LinearLayout.LayoutParams(
+                                    0,
+                                    ViewGroup.LayoutParams.WRAP_CONTENT,
+                                    1f);
+                    botLeftParams.rightMargin = dp(5);
+                    botRow.addView(
+                            botHealthCard(
+                                    "Sharla",
+                                    finalHealth.optJSONObject("sharla"),
+                                    true),
+                            botLeftParams);
+
+                    LinearLayout.LayoutParams botRightParams =
+                            new LinearLayout.LayoutParams(
+                                    0,
+                                    ViewGroup.LayoutParams.WRAP_CONTENT,
+                                    1f);
+                    botRightParams.leftMargin = dp(5);
+                    botRow.addView(
+                            botHealthCard(
+                                    "Head Pool",
+                                    finalHealth.optJSONObject("headpool"),
+                                    false),
+                            botRightParams);
+
+                    holder.addView(
+                            botRow,
+                            new LinearLayout.LayoutParams(
+                                    ViewGroup.LayoutParams.MATCH_PARENT,
+                                    ViewGroup.LayoutParams.WRAP_CONTENT));
+                    holder.addView(spacer(10));
                 } else {
                     holder.addView(text("Bot health: " +
                             (finalHealthError == null ? "Unavailable" : finalHealthError), 14, RED, false));
@@ -3014,48 +3046,177 @@ public class MainActivity extends Activity {
 
     private View heartbeatHealthCard(JSONObject data, String error) {
         LinearLayout box = cardInner();
-        box.addView(text("💓 Head Pool Website Heartbeat", 18, TEXT, true));
+        box.setPadding(dp(12), dp(10), dp(12), dp(10));
+        box.addView(text("💓 Head Pool Website Heartbeat", 16, TEXT, true));
 
         if (data == null) {
-            box.addView(text("Unavailable", 14, RED, true));
-            box.addView(statLine("Offline threshold", "150 sec"));
-            box.addView(statLine("HTTP result", "Failed"));
-            box.addView(text("Could not read api/headpool.json" +
-                    (error == null ? "." : ": " + error), 12, MUTED, false));
+            box.addView(healthStatusLine(false, "Heartbeat unavailable"));
+            box.addView(healthStatPair(
+                    "Last heartbeat", "Unknown",
+                    "Offline threshold", "150 sec"));
+            box.addView(healthCenteredStat("Updated", "—"));
+            box.addView(healthStatPair(
+                    "HTTP result", "Failed",
+                    "Commands", "—"));
+            box.addView(healthStatPair(
+                    "Servers", "—",
+                    "Bot uptime", "—"));
+            box.addView(healthSingleStat("Website state", "Unknown"));
+
+            TextView detail = text(
+                    "Could not read api/headpool.json" +
+                            (error == null ? "." : ": " + error),
+                    11,
+                    MUTED,
+                    false);
+            detail.setPadding(0, dp(6), 0, 0);
+            box.addView(detail);
             return box;
         }
 
         String updatedAt = data.optString("updated_at", "");
         long ageSeconds = -1;
         try {
-            ageSeconds = Math.max(0,
-                    (System.currentTimeMillis() - Instant.parse(updatedAt).toEpochMilli()) / 1000L);
+            ageSeconds = Math.max(
+                    0,
+                    (System.currentTimeMillis()
+                            - Instant.parse(updatedAt).toEpochMilli()) / 1000L);
         } catch (Exception ignored) {}
 
         boolean healthy = ageSeconds >= 0 && ageSeconds < 150;
         long commandTotal = data.has("command_count")
                 ? data.optLong("command_count", 0)
-                : data.optLong("slash_commands", 0) + data.optLong("prefix_commands", 0);
+                : data.optLong("slash_commands", 0)
+                        + data.optLong("prefix_commands", 0);
+
         long uptime = data.optLong("uptime_seconds", 0);
         if (healthy && ageSeconds >= 0) uptime += ageSeconds;
 
-        box.addView(text(healthy ? "● Healthy" : "● Stale / offline",
-                16, healthy ? GREEN : RED, true));
-        box.addView(statLine("Last heartbeat",
-                ageSeconds < 0 ? "Unknown" : heartbeatAgeText(ageSeconds)));
-        box.addView(statLine("Offline threshold", "150 sec"));
-        box.addView(statLine("HTTP result", "HTTP 200"));
-        box.addView(statLine("Updated", updatedAt.isEmpty() ? "—" : updatedAt));
-        box.addView(statLine("Servers", data.has("guilds") ? String.valueOf(data.optInt("guilds", 0)) : "—"));
-        box.addView(statLine("Commands", commandTotal > 0 ? String.valueOf(commandTotal) : "—"));
-        box.addView(statLine("Bot uptime", uptime > 0 ? durationText(uptime) : "—"));
-        box.addView(statLine("Website state", ageSeconds < 0 ? "Unknown" : (healthy ? "Fresh" : "Expired")));
+        box.addView(healthStatusLine(
+                healthy,
+                healthy ? "Heartbeat fresh" : "Heartbeat stale"));
 
-        box.addView(text(
-                healthy
-                        ? "Nerdhalla is receiving a fresh Head Pool heartbeat."
-                        : "The heartbeat is older than the website cutoff. Head Pool may still be running, but Nerdhalla will treat this heartbeat as offline until a fresh update arrives.",
-                12, MUTED, false));
+        box.addView(healthStatPair(
+                "Last heartbeat",
+                ageSeconds < 0 ? "Unknown" : heartbeatAgeText(ageSeconds),
+                "Offline threshold",
+                "150 sec"));
+
+        box.addView(healthCenteredStat(
+                "Updated",
+                updatedAt.isEmpty() ? "—" : updatedAt));
+
+        box.addView(healthStatPair(
+                "HTTP result",
+                "HTTP 200",
+                "Commands",
+                commandTotal > 0 ? String.valueOf(commandTotal) : "—"));
+
+        box.addView(healthStatPair(
+                "Servers",
+                data.has("guilds")
+                        ? String.valueOf(data.optInt("guilds", 0))
+                        : "—",
+                "Bot uptime",
+                uptime > 0 ? durationText(uptime) : "—"));
+
+        box.addView(healthSingleStat(
+                "Website state",
+                ageSeconds < 0
+                        ? "Unknown"
+                        : (healthy ? "Fresh" : "Expired")));
+
+        return box;
+    }
+
+    private View healthStatusLine(boolean healthy, String label) {
+        LinearLayout row = new LinearLayout(this);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        row.setGravity(Gravity.CENTER_VERTICAL);
+        row.setPadding(0, dp(5), 0, dp(3));
+
+        TextView dot = text("●", 17, healthy ? GREEN : RED, true);
+        row.addView(dot);
+
+        TextView status = text(label, 12, MUTED, false);
+        LinearLayout.LayoutParams statusParams =
+                new LinearLayout.LayoutParams(
+                        ViewGroup.LayoutParams.WRAP_CONTENT,
+                        ViewGroup.LayoutParams.WRAP_CONTENT);
+        statusParams.leftMargin = dp(6);
+        row.addView(status, statusParams);
+        return row;
+    }
+
+    private View healthStatPair(
+            String leftLabel,
+            String leftValue,
+            String rightLabel,
+            String rightValue) {
+
+        LinearLayout row = new LinearLayout(this);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        row.setGravity(Gravity.TOP);
+        row.setPadding(0, dp(4), 0, dp(4));
+
+        LinearLayout left = healthMetric(leftLabel, leftValue, Gravity.START);
+        LinearLayout right = healthMetric(rightLabel, rightValue, Gravity.START);
+
+        LinearLayout.LayoutParams leftParams =
+                new LinearLayout.LayoutParams(
+                        0,
+                        ViewGroup.LayoutParams.WRAP_CONTENT,
+                        1f);
+        leftParams.rightMargin = dp(8);
+        row.addView(left, leftParams);
+
+        LinearLayout.LayoutParams rightParams =
+                new LinearLayout.LayoutParams(
+                        0,
+                        ViewGroup.LayoutParams.WRAP_CONTENT,
+                        1f);
+        rightParams.leftMargin = dp(8);
+        row.addView(right, rightParams);
+
+        return row;
+    }
+
+    private View healthCenteredStat(String label, String value) {
+        LinearLayout metric = healthMetric(label, value, Gravity.CENTER);
+        LinearLayout.LayoutParams params =
+                new LinearLayout.LayoutParams(
+                        ViewGroup.LayoutParams.MATCH_PARENT,
+                        ViewGroup.LayoutParams.WRAP_CONTENT);
+        params.topMargin = dp(3);
+        params.bottomMargin = dp(3);
+        metric.setLayoutParams(params);
+        return metric;
+    }
+
+    private View healthSingleStat(String label, String value) {
+        LinearLayout metric = healthMetric(label, value, Gravity.START);
+        LinearLayout.LayoutParams params =
+                new LinearLayout.LayoutParams(
+                        ViewGroup.LayoutParams.MATCH_PARENT,
+                        ViewGroup.LayoutParams.WRAP_CONTENT);
+        params.topMargin = dp(3);
+        metric.setLayoutParams(params);
+        return metric;
+    }
+
+    private LinearLayout healthMetric(String label, String value, int gravity) {
+        LinearLayout box = new LinearLayout(this);
+        box.setOrientation(LinearLayout.VERTICAL);
+        box.setGravity(gravity);
+        box.addView(text(label, 11, MUTED, false));
+
+        TextView v = text(
+                value == null || value.isEmpty() ? "—" : value,
+                13,
+                TEXT,
+                true);
+        v.setGravity(gravity);
+        box.addView(v);
         return box;
     }
 
@@ -3086,19 +3247,74 @@ public class MainActivity extends Activity {
 
     private View botHealthCard(String name, JSONObject d, boolean sharla) {
         if (d == null) d = new JSONObject();
+
         LinearLayout box = cardInner();
+        box.setPadding(dp(10), dp(9), dp(10), dp(9));
+
         boolean online = d.optBoolean("online", false);
-        box.addView(text(name + "  " + (online ? "● Online" : "● Offline"), 18, online ? GREEN : RED, true));
+
+        LinearLayout titleRow = new LinearLayout(this);
+        titleRow.setOrientation(LinearLayout.HORIZONTAL);
+        titleRow.setGravity(Gravity.CENTER_VERTICAL);
+
+        titleRow.addView(text("●", 17, online ? GREEN : RED, true));
+
+        TextView nameText = text(name, 15, TEXT, true);
+        LinearLayout.LayoutParams nameParams =
+                new LinearLayout.LayoutParams(
+                        0,
+                        ViewGroup.LayoutParams.WRAP_CONTENT,
+                        1f);
+        nameParams.leftMargin = dp(6);
+        titleRow.addView(nameText, nameParams);
+
+        box.addView(titleRow);
+
         if (sharla) {
-            box.addView(statLine("Discord gateway", d.optBoolean("discord_ready", false) ? "Ready" : "Not ready"));
-            box.addView(statLine("Latency", d.has("latency_ms") ? d.optInt("latency_ms") + " ms" : "—"));
-            box.addView(statLine("Servers", String.valueOf(d.optInt("guild_count", 0))));
-            box.addView(statLine("Members", String.valueOf(d.optInt("member_count", 0))));
+            box.addView(text(
+                    "Gateway: " +
+                            (d.optBoolean("discord_ready", false)
+                                    ? "Ready"
+                                    : "Not ready"),
+                    11,
+                    MUTED,
+                    false));
+            box.addView(text(
+                    "Latency: " +
+                            (d.has("latency_ms")
+                                    ? d.optInt("latency_ms") + " ms"
+                                    : "—"),
+                    11,
+                    MUTED,
+                    false));
+            box.addView(text(
+                    "Servers: " + d.optInt("guild_count", 0),
+                    11,
+                    MUTED,
+                    false));
+            box.addView(text(
+                    "Members: " + d.optInt("member_count", 0),
+                    11,
+                    MUTED,
+                    false));
         } else {
-            box.addView(statLine("Service", d.optString("active_state", "unknown")));
-            box.addView(statLine("Process", d.optString("sub_state", "unknown")));
-            box.addView(statLine("PID", d.optString("pid", "—")));
+            box.addView(text(
+                    "Service: " + d.optString("active_state", "unknown"),
+                    11,
+                    MUTED,
+                    false));
+            box.addView(text(
+                    "Process: " + d.optString("sub_state", "unknown"),
+                    11,
+                    MUTED,
+                    false));
+            box.addView(text(
+                    "PID: " + d.optString("pid", "—"),
+                    11,
+                    MUTED,
+                    false));
         }
+
         return box;
     }
 
@@ -3198,25 +3414,105 @@ public class MainActivity extends Activity {
             memberRoleSpinner = darkSpinner(roleLabels);
             addField(mod, "Role", memberRoleSpinner);
 
+            LinearLayout memberActionGrid = new LinearLayout(this);
+            memberActionGrid.setOrientation(LinearLayout.HORIZONTAL);
+            memberActionGrid.setGravity(Gravity.TOP);
+
+            LinearLayout memberActionLeft = new LinearLayout(this);
+            memberActionLeft.setOrientation(LinearLayout.VERTICAL);
+
+            LinearLayout memberActionRight = new LinearLayout(this);
+            memberActionRight.setOrientation(LinearLayout.VERTICAL);
+
             if (hasPerm("member_moderation")) {
-                addMemberActionButton(mod, "Warn", "warn", false);
-                addMemberActionButton(mod, "Timeout", "timeout", false);
-                addMemberActionButton(mod, "Remove Timeout", "untimeout", false);
+                addMemberActionButtonCompact(
+                        memberActionLeft,
+                        "Warn",
+                        "warn",
+                        false);
+                addMemberActionButtonCompact(
+                        memberActionLeft,
+                        "Timeout",
+                        "timeout",
+                        false);
+                addMemberActionButtonCompact(
+                        memberActionRight,
+                        "Remove Timeout",
+                        "untimeout",
+                        false);
             }
 
             if (hasPerm("member_roles")) {
-                addMemberActionButton(mod, "Add Role", "add_role", false);
-                addMemberActionButton(mod, "Remove Role", "remove_role", false);
+                addMemberActionButtonCompact(
+                        memberActionLeft,
+                        "Add Role",
+                        "add_role",
+                        false);
+                addMemberActionButtonCompact(
+                        memberActionRight,
+                        "Remove Role",
+                        "remove_role",
+                        false);
             }
 
+            LinearLayout.LayoutParams memberActionLeftParams =
+                    new LinearLayout.LayoutParams(
+                            0,
+                            ViewGroup.LayoutParams.WRAP_CONTENT,
+                            1f);
+            memberActionLeftParams.rightMargin = dp(5);
+            memberActionGrid.addView(
+                    memberActionLeft,
+                    memberActionLeftParams);
+
+            LinearLayout.LayoutParams memberActionRightParams =
+                    new LinearLayout.LayoutParams(
+                            0,
+                            ViewGroup.LayoutParams.WRAP_CONTENT,
+                            1f);
+            memberActionRightParams.leftMargin = dp(5);
+            memberActionGrid.addView(
+                    memberActionRight,
+                    memberActionRightParams);
+
+            mod.addView(
+                    memberActionGrid,
+                    new LinearLayout.LayoutParams(
+                            ViewGroup.LayoutParams.MATCH_PARENT,
+                            ViewGroup.LayoutParams.WRAP_CONTENT));
+
             if (hasPerm("member_kick_ban")) {
-                addMemberActionButton(mod, "Kick", "kick", true);
-                addMemberActionButton(mod, "Ban", "ban", true);
+                LinearLayout dangerRow = new LinearLayout(this);
+                dangerRow.setOrientation(LinearLayout.HORIZONTAL);
+
+                addMemberActionButtonCompact(
+                        dangerRow,
+                        "Kick",
+                        "kick",
+                        true,
+                        true);
+                addMemberActionButtonCompact(
+                        dangerRow,
+                        "Ban",
+                        "ban",
+                        true,
+                        false);
+
+                LinearLayout.LayoutParams dangerRowParams =
+                        new LinearLayout.LayoutParams(
+                                ViewGroup.LayoutParams.MATCH_PARENT,
+                                ViewGroup.LayoutParams.WRAP_CONTENT);
+                dangerRowParams.topMargin = dp(4);
+                mod.addView(dangerRow, dangerRowParams);
 
                 EditText unbanId = edit("Banned Discord user ID", false);
                 addField(mod, "Unban by ID", unbanId);
                 Button unban = secondaryButton("Unban ID");
-                mod.addView(unban, buttonParams());
+                unban.setTextSize(12);
+                LinearLayout.LayoutParams unbanParams =
+                        new LinearLayout.LayoutParams(dp(120), dp(38));
+                unbanParams.topMargin = dp(5);
+                mod.addView(unban, unbanParams);
                 unban.setOnClickListener(v -> {
                     String id = unbanId.getText().toString().trim();
                     if (id.isEmpty()) {
@@ -3263,10 +3559,60 @@ public class MainActivity extends Activity {
                 hasPerm("member_kick_ban");
     }
 
-    private void addMemberActionButton(LinearLayout parent, String label, String action, boolean dangerous) {
-        Button button = dangerous ? dangerButton(label) : secondaryButton(label);
-        parent.addView(button, buttonParams());
-        button.setOnClickListener(v -> runMemberAction(action, selectedMemberId));
+    private void addMemberActionButtonCompact(
+            LinearLayout parent,
+            String label,
+            String action,
+            boolean dangerous) {
+
+        Button button = dangerous
+                ? dangerButton(label)
+                : secondaryButton(label);
+
+        button.setTextSize(12);
+        button.setPadding(dp(7), 0, dp(7), 0);
+
+        LinearLayout.LayoutParams params =
+                new LinearLayout.LayoutParams(
+                        ViewGroup.LayoutParams.MATCH_PARENT,
+                        dp(38));
+        params.topMargin = dp(3);
+        params.bottomMargin = dp(3);
+
+        parent.addView(button, params);
+        button.setOnClickListener(
+                v -> runMemberAction(action, selectedMemberId));
+    }
+
+    private void addMemberActionButtonCompact(
+            LinearLayout parent,
+            String label,
+            String action,
+            boolean dangerous,
+            boolean leftButton) {
+
+        Button button = dangerous
+                ? dangerButton(label)
+                : secondaryButton(label);
+
+        button.setTextSize(12);
+        button.setPadding(dp(7), 0, dp(7), 0);
+
+        LinearLayout.LayoutParams params =
+                new LinearLayout.LayoutParams(
+                        0,
+                        dp(38),
+                        1f);
+
+        if (leftButton) {
+            params.rightMargin = dp(5);
+        } else {
+            params.leftMargin = dp(5);
+        }
+
+        parent.addView(button, params);
+        button.setOnClickListener(
+                v -> runMemberAction(action, selectedMemberId));
     }
 
     private int selectedTimeoutMinutes() {
