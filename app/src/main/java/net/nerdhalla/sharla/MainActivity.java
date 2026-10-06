@@ -90,6 +90,8 @@ public class MainActivity extends Activity {
     private float swipeDownX;
     private float swipeDownY;
     private boolean swipeTracking;
+    private int pendingMenuTransitionDirection = 0;
+    private boolean menuTransitionRunning = false;
 
     private JSONObject session;
     private JSONObject meData;
@@ -196,15 +198,17 @@ public class MainActivity extends Activity {
     }
 
     private void navigateMenuBySwipe(int direction) {
-        if (direction == 0 || (busy != null && busy.getVisibility() == View.VISIBLE)) return;
+        if (direction == 0 ||
+                menuTransitionRunning ||
+                (busy != null && busy.getVisibility() == View.VISIBLE)) return;
 
         if ("my".equals(currentTop)) {
             if (meData == null) return;
             List<String> keys = list("profile", "homeworlds", "inventory", "achievements");
             int current = keys.indexOf(currentMySection);
             if (current < 0) current = 0;
-            int next = current + direction;
-            if (next < 0 || next >= keys.size()) return;
+            int next = Math.floorMod(current + direction, keys.size());
+            pendingMenuTransitionDirection = direction;
             currentMySection = keys.get(next);
             renderMySharla();
             return;
@@ -213,10 +217,11 @@ public class MainActivity extends Activity {
         if ("admin".equals(currentTop)) {
             if (adminAccess == null || guildData == null) return;
             List<String> keys = visibleAdminTabKeys();
+            if (keys.isEmpty()) return;
             int current = keys.indexOf(currentAdminSection);
             if (current < 0) current = 0;
-            int next = current + direction;
-            if (next < 0 || next >= keys.size()) return;
+            int next = Math.floorMod(current + direction, keys.size());
+            pendingMenuTransitionDirection = direction;
             currentAdminSection = keys.get(next);
             renderAdmin();
         }
@@ -476,6 +481,7 @@ public class MainActivity extends Activity {
         nav.addView(adminNav, p);
 
         myNav.setOnClickListener(v -> {
+            pendingMenuTransitionDirection = 0;
             currentTop = "my";
             titleText.setText("My Sharla");
             updateBottomNav();
@@ -483,6 +489,7 @@ public class MainActivity extends Activity {
         });
 
         adminNav.setOnClickListener(v -> {
+            pendingMenuTransitionDirection = 0;
             currentTop = "admin";
             titleText.setText("Sharla Admin");
             updateBottomNav();
@@ -568,6 +575,7 @@ public class MainActivity extends Activity {
             TextView b = chip(tab[1], tab[0].equals(currentMySection));
             b.setTag(tab[0]);
             b.setOnClickListener(v -> {
+                pendingMenuTransitionDirection = 0;
                 currentMySection = tab[0];
                 renderMySharla();
             });
@@ -1033,6 +1041,7 @@ public class MainActivity extends Activity {
         TextView b = chip(label, key.equals(currentAdminSection));
         b.setTag(key);
         b.setOnClickListener(v -> {
+            pendingMenuTransitionDirection = 0;
             currentAdminSection = key;
             renderAdmin();
         });
@@ -2613,8 +2622,59 @@ public class MainActivity extends Activity {
     }
 
     private void setContent(View view) {
-        contentHost.removeAllViews();
+        if (contentHost == null) return;
+
+        int direction = pendingMenuTransitionDirection;
+        pendingMenuTransitionDirection = 0;
+
+        if (direction == 0 || contentHost.getChildCount() == 0) {
+            contentHost.removeAllViews();
+            view.setTranslationX(0f);
+            view.setAlpha(1f);
+            contentHost.addView(view, match());
+            menuTransitionRunning = false;
+            return;
+        }
+
+        View oldView = contentHost.getChildAt(contentHost.getChildCount() - 1);
+        int width = contentHost.getWidth();
+        if (width <= 0) width = getResources().getDisplayMetrics().widthPixels;
+        if (width <= 0) {
+            contentHost.removeAllViews();
+            contentHost.addView(view, match());
+            menuTransitionRunning = false;
+            return;
+        }
+
+        menuTransitionRunning = true;
+
+        view.setTranslationX(direction > 0 ? width : -width);
+        view.setAlpha(0.88f);
         contentHost.addView(view, match());
+
+        long duration = 260L;
+
+        oldView.animate()
+                .translationX(direction > 0 ? -width : width)
+                .alpha(0.88f)
+                .setDuration(duration)
+                .withEndAction(() -> {
+                    if (oldView.getParent() == contentHost) {
+                        contentHost.removeView(oldView);
+                    }
+                })
+                .start();
+
+        view.animate()
+                .translationX(0f)
+                .alpha(1f)
+                .setDuration(duration)
+                .withEndAction(() -> {
+                    view.setTranslationX(0f);
+                    view.setAlpha(1f);
+                    menuTransitionRunning = false;
+                })
+                .start();
     }
 
     private void showError(String title, String message, Runnable retry) {
