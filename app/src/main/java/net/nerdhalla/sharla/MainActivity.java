@@ -716,30 +716,95 @@ public class MainActivity extends Activity {
         avatar.setBackground(roundRect(PANEL2, 18, LINE, 1));
         person.addView(avatar, new LinearLayout.LayoutParams(dp(72), dp(72)));
 
-        LinearLayout names = new LinearLayout(this);
-        names.setOrientation(LinearLayout.VERTICAL);
-        names.setPadding(dp(14), 0, 0, 0);
-        names.addView(text(session.optString("display_name", session.optString("username", "Discord User")), 20, TEXT, true));
-        names.addView(text("@" + session.optString("username", ""), 13, MUTED, false));
-        person.addView(names, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
-        profile.addView(person);
-
-        String avatarUrl = session.optString("avatar_url", "");
-        if (!avatarUrl.isEmpty()) loadImage(avatarUrl, avatar);
-
         JSONObject p = meData.optJSONObject("profile");
         if (p == null) p = new JSONObject();
         JSONObject stats = meData.optJSONObject("stats");
         if (stats == null) stats = new JSONObject();
 
+        LinearLayout names = new LinearLayout(this);
+        names.setOrientation(LinearLayout.VERTICAL);
+        names.setPadding(dp(14), 0, 0, 0);
+
+        // Use Discord's actual display name. The session currently does not expose
+        // Discord profile-decoration/name-effect metadata, so do not fake effects.
+        String discordDisplayName = session.optString(
+                "display_name",
+                session.optString("username", "Discord User"));
+        names.addView(text(discordDisplayName, 20, TEXT, true));
+
+        // Sharla title sits where the old @username line used to be, without a label.
+        names.addView(text(
+                p.optString("title", "Noob Alert!"),
+                13,
+                GOLD,
+                false));
+
+        person.addView(names, new LinearLayout.LayoutParams(
+                0,
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+                1f));
+        profile.addView(person);
+
+        String avatarUrl = session.optString("avatar_url", "");
+        if (!avatarUrl.isEmpty()) loadImage(avatarUrl, avatar);
+
         profile.addView(spacer(12));
-        profile.addView(statLine("Title", p.optString("title", "Noob Alert!")));
-        profile.addView(statLine("Activity Tier", p.optString("tier", "Newcomer 🆕")));
-        profile.addView(statLine("Messages", fmt(p.optLong("count", 0))));
-        profile.addView(statLine("Horse Tokens", fmt(p.optLong("horse_tokens", 0)) + " 🪙"));
-        profile.addView(statLine(
-                "Collection",
-                stats.optInt("unique_items", 0) + " unique items"));
+
+        LinearLayout profileStats = new LinearLayout(this);
+        profileStats.setOrientation(LinearLayout.HORIZONTAL);
+        profileStats.setGravity(Gravity.TOP);
+
+        LinearLayout leftStats = new LinearLayout(this);
+        leftStats.setOrientation(LinearLayout.VERTICAL);
+        leftStats.addView(text("Collection", 12, MUTED, false));
+        leftStats.addView(text(
+                stats.optInt("unique_items", 0) + " unique items",
+                15,
+                TEXT,
+                true));
+        leftStats.addView(spacer(9));
+        leftStats.addView(text("Horse Tokens", 12, MUTED, false));
+        leftStats.addView(text(
+                fmt(p.optLong("horse_tokens", 0)) + " 🪙",
+                15,
+                TEXT,
+                true));
+
+        LinearLayout rightStats = new LinearLayout(this);
+        rightStats.setOrientation(LinearLayout.VERTICAL);
+        rightStats.addView(text("Tier", 12, MUTED, false));
+        rightStats.addView(text(
+                p.optString("tier", "Newcomer 🆕"),
+                15,
+                TEXT,
+                true));
+        rightStats.addView(spacer(9));
+        rightStats.addView(text("Messages", 12, MUTED, false));
+        rightStats.addView(text(
+                fmt(p.optLong("count", 0)),
+                15,
+                TEXT,
+                true));
+
+        LinearLayout.LayoutParams leftStatsParams =
+                new LinearLayout.LayoutParams(
+                        0,
+                        ViewGroup.LayoutParams.WRAP_CONTENT,
+                        1f);
+        leftStatsParams.rightMargin = dp(10);
+        profileStats.addView(leftStats, leftStatsParams);
+
+        LinearLayout.LayoutParams rightStatsParams =
+                new LinearLayout.LayoutParams(
+                        0,
+                        ViewGroup.LayoutParams.WRAP_CONTENT,
+                        1f);
+        rightStatsParams.leftMargin = dp(10);
+        profileStats.addView(rightStats, rightStatsParams);
+
+        profile.addView(profileStats, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT));
 
         JSONObject loot = meData.optJSONObject("loot");
 
