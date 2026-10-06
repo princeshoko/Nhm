@@ -1439,38 +1439,60 @@ public class MainActivity extends Activity {
         }
 
         for (JSONObject item : items) {
-            LinearLayout itemCard = card();
             String rarity = item.optString("rarity", "Unknown");
-            TextView name = text(item.optString("name", "Item"), 17, rarityColor(rarity), true);
-            itemCard.addView(name);
-            itemCard.addView(text(rarity + "  •  ×" + item.optInt("quantity", 0) +
-                    "  •  " + tokenValue(rarity) + " 🪙 each", 13, MUTED, false));
 
-            String desc = item.optString("description", "");
-            if (!desc.isEmpty()) {
-                TextView d = text(desc, 13, MUTED, false);
-                d.setPadding(0, dp(8), 0, 0);
-                itemCard.addView(d);
-            }
+            LinearLayout itemCard = card();
+            itemCard.setOrientation(LinearLayout.HORIZONTAL);
+            itemCard.setGravity(Gravity.CENTER_VERTICAL);
+            itemCard.setPadding(dp(12), dp(7), dp(8), dp(7));
 
-            Button sell = secondaryButton("Sell 1  +" + tokenValue(rarity) + " 🪙");
-            itemCard.addView(sell, buttonParams());
+            TextView name = text(
+                    item.optString("name", "Item"),
+                    15,
+                    TEXT,
+                    true);
+            name.setSingleLine(false);
+            itemCard.addView(
+                    name,
+                    new LinearLayout.LayoutParams(
+                            0,
+                            ViewGroup.LayoutParams.WRAP_CONTENT,
+                            1f));
+
+            Button sell = secondaryButton(tokenValue(rarity) + " 🪙");
+            sell.setTextSize(13);
+            sell.setPadding(dp(8), 0, dp(8), 0);
+
+            LinearLayout.LayoutParams sellParams =
+                    new LinearLayout.LayoutParams(dp(82), dp(38));
+            sellParams.leftMargin = dp(10);
+            itemCard.addView(sell, sellParams);
+
             sell.setOnClickListener(v -> {
                 JSONObject body = new JSONObject();
                 try {
                     body.put("item", item.optString("name", ""));
                     body.put("rarity", rarity);
                 } catch (Exception ignored) {}
-                String warning = item.optInt("quantity", 0) <= 1 ? "\n\nThis is your last copy." : "";
-                confirm("Sell item?", "Sell one " + item.optString("name", "item") + " for " +
-                        tokenValue(rarity) + " Horse Tokens?" + warning, () ->
-                        post("sell_duplicates", body, result -> {
+                String warning = item.optInt("quantity", 0) <= 1
+                        ? "\n\nThis is your last copy."
+                        : "";
+                confirm(
+                        "Sell item?",
+                        "Sell one " + item.optString("name", "item") +
+                                " for " + tokenValue(rarity) +
+                                " Horse Tokens?" + warning,
+                        () -> post("sell_duplicates", body, result -> {
                             toast("Item sold.");
                             meData = null;
                             loadMySharla();
                         }));
             });
-            parent.addView(itemCard, cardParams());
+
+            LinearLayout.LayoutParams compactCard = cardParams();
+            compactCard.topMargin = dp(2);
+            compactCard.bottomMargin = dp(2);
+            parent.addView(itemCard, compactCard);
         }
     }
 
