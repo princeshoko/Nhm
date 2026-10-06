@@ -1099,11 +1099,49 @@ public class MainActivity extends Activity {
         hero.addView(top);
 
         hero.addView(spacer(12));
-        hero.addView(statLine("Horse Tokens", fmt(shop.optLong("balance", 0)) + " 🪙"));
-        hero.addView(statLine(
-                "Shop Collection",
+
+        LinearLayout shopStats = new LinearLayout(this);
+        shopStats.setOrientation(LinearLayout.HORIZONTAL);
+        shopStats.setGravity(Gravity.TOP);
+
+        LinearLayout shopLeft = new LinearLayout(this);
+        shopLeft.setOrientation(LinearLayout.VERTICAL);
+        shopLeft.addView(text("Horse Tokens", 12, MUTED, false));
+        shopLeft.addView(text(
+                fmt(shop.optLong("balance", 0)) + " 🪙",
+                15,
+                TEXT,
+                true));
+
+        LinearLayout shopRight = new LinearLayout(this);
+        shopRight.setOrientation(LinearLayout.VERTICAL);
+        shopRight.addView(text("Shop Collection", 12, MUTED, false));
+        shopRight.addView(text(
                 shop.optInt("owned_unique", 0) + "/" + shop.optInt("total", 0) +
-                        " • " + trim1(shop.optDouble("completion", 0)) + "%"));
+                        " • " + trim1(shop.optDouble("completion", 0)) + "%",
+                15,
+                TEXT,
+                true));
+
+        LinearLayout.LayoutParams shopStatLeftParams =
+                new LinearLayout.LayoutParams(
+                        0,
+                        ViewGroup.LayoutParams.WRAP_CONTENT,
+                        1f);
+        shopStatLeftParams.rightMargin = dp(10);
+        shopStats.addView(shopLeft, shopStatLeftParams);
+
+        LinearLayout.LayoutParams shopStatRightParams =
+                new LinearLayout.LayoutParams(
+                        0,
+                        ViewGroup.LayoutParams.WRAP_CONTENT,
+                        1f);
+        shopStatRightParams.leftMargin = dp(10);
+        shopStats.addView(shopRight, shopStatRightParams);
+
+        hero.addView(shopStats, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT));
         c.addView(hero, cardParams());
 
         JSONArray items = shop.optJSONArray("items");
@@ -1281,12 +1319,42 @@ public class MainActivity extends Activity {
 
         LinearLayout card = card();
         card.addView(bigStat(trim1(h.optDouble("win_rate", 0)) + "%", "overall win rate"));
-        card.addView(statLine("Archived", String.valueOf(h.optInt("archived", 0))));
-        card.addView(statLine("Overall", record(h)));
-        card.addView(statLine("PvP", record(h.optJSONObject("pvp"))));
-        card.addView(statLine("Head Pool Easy", record(h.optJSONObject("easy"))));
-        card.addView(statLine("Head Pool Normal", record(h.optJSONObject("normal"))));
-        card.addView(statLine("Head Pool Hard", record(h.optJSONObject("hard"))));
+
+        LinearLayout homeworldStats = new LinearLayout(this);
+        homeworldStats.setOrientation(LinearLayout.HORIZONTAL);
+        homeworldStats.setGravity(Gravity.TOP);
+
+        LinearLayout homeworldLeft = new LinearLayout(this);
+        homeworldLeft.setOrientation(LinearLayout.VERTICAL);
+        homeworldLeft.addView(statLine("Archived", String.valueOf(h.optInt("archived", 0))));
+        homeworldLeft.addView(statLine("Overall", record(h)));
+        homeworldLeft.addView(statLine("PvP", record(h.optJSONObject("pvp"))));
+
+        LinearLayout homeworldRight = new LinearLayout(this);
+        homeworldRight.setOrientation(LinearLayout.VERTICAL);
+        homeworldRight.addView(statLine("Head Pool Easy", record(h.optJSONObject("easy"))));
+        homeworldRight.addView(statLine("Head Pool Normal", record(h.optJSONObject("normal"))));
+        homeworldRight.addView(statLine("Head Pool Hard", record(h.optJSONObject("hard"))));
+
+        LinearLayout.LayoutParams homeworldLeftParams =
+                new LinearLayout.LayoutParams(
+                        0,
+                        ViewGroup.LayoutParams.WRAP_CONTENT,
+                        1f);
+        homeworldLeftParams.rightMargin = dp(8);
+        homeworldStats.addView(homeworldLeft, homeworldLeftParams);
+
+        LinearLayout.LayoutParams homeworldRightParams =
+                new LinearLayout.LayoutParams(
+                        0,
+                        ViewGroup.LayoutParams.WRAP_CONTENT,
+                        1f);
+        homeworldRightParams.leftMargin = dp(8);
+        homeworldStats.addView(homeworldRight, homeworldRightParams);
+
+        card.addView(homeworldStats, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT));
 
         JSONObject legacy = h.optJSONObject("legacy_ai");
         if (legacy != null && legacy.optInt("games", 0) > 0) {
@@ -1316,10 +1384,49 @@ public class MainActivity extends Activity {
         if (stats == null) stats = new JSONObject();
 
         LinearLayout summary = card();
-        summary.addView(statLine("Unique items", String.valueOf(stats.optInt("unique_items", 0))));
-        summary.addView(statLine("Total items", String.valueOf(stats.optInt("total_items", 0))));
-        summary.addView(statLine("Duplicates", String.valueOf(stats.optInt("duplicate_items", 0))));
-        summary.addView(statLine("Duplicate pawn value", stats.optInt("duplicate_sell_value", 0) + " 🪙"));
+
+        LinearLayout inventoryStats = new LinearLayout(this);
+        inventoryStats.setOrientation(LinearLayout.HORIZONTAL);
+        inventoryStats.setGravity(Gravity.TOP);
+
+        LinearLayout inventoryLeft = new LinearLayout(this);
+        inventoryLeft.setOrientation(LinearLayout.VERTICAL);
+        inventoryLeft.addView(statLine(
+                "Unique items",
+                String.valueOf(stats.optInt("unique_items", 0))));
+        inventoryLeft.addView(statLine(
+                "Total items",
+                String.valueOf(stats.optInt("total_items", 0))));
+
+        LinearLayout inventoryRight = new LinearLayout(this);
+        inventoryRight.setOrientation(LinearLayout.VERTICAL);
+        inventoryRight.addView(statLine(
+                "Duplicates",
+                String.valueOf(stats.optInt("duplicate_items", 0))));
+        inventoryRight.addView(statLine(
+                "Pawn value",
+                stats.optInt("duplicate_sell_value", 0) + " 🪙"));
+
+        LinearLayout.LayoutParams inventoryLeftParams =
+                new LinearLayout.LayoutParams(
+                        0,
+                        ViewGroup.LayoutParams.WRAP_CONTENT,
+                        1f);
+        inventoryLeftParams.rightMargin = dp(8);
+        inventoryStats.addView(inventoryLeft, inventoryLeftParams);
+
+        LinearLayout.LayoutParams inventoryRightParams =
+                new LinearLayout.LayoutParams(
+                        0,
+                        ViewGroup.LayoutParams.WRAP_CONTENT,
+                        1f);
+        inventoryRightParams.leftMargin = dp(8);
+        inventoryStats.addView(inventoryRight, inventoryRightParams);
+
+        summary.addView(inventoryStats, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT));
+
         Button all = dangerButton("Sell All Duplicates");
         summary.addView(all, buttonParams());
         int dupeQty = stats.optInt("duplicate_items", 0);
@@ -1338,15 +1445,55 @@ public class MainActivity extends Activity {
         final List<JSONObject> items = jsonList(meData.optJSONArray("inventory"));
 
         LinearLayout controls = card();
-        controls.addView(sectionTitle("Inventory view"));
+        controls.setPadding(dp(12), dp(10), dp(12), dp(10));
+
+        LinearLayout controlRow = new LinearLayout(this);
+        controlRow.setOrientation(LinearLayout.HORIZONTAL);
+        controlRow.setGravity(Gravity.TOP);
+
+        LinearLayout rarityBox = new LinearLayout(this);
+        rarityBox.setOrientation(LinearLayout.VERTICAL);
+        rarityBox.addView(text("Rarity", 11, MUTED, false));
         Spinner rarity = darkSpinner(list(
                 "All rarities", "Mythic", "Legendary", "Rare", "Uncommon", "Common"));
-        addField(controls, "Rarity", rarity);
+        rarityBox.addView(rarity, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT));
 
+        LinearLayout sortBox = new LinearLayout(this);
+        sortBox.setOrientation(LinearLayout.VERTICAL);
+        sortBox.addView(text("Sort by", 11, MUTED, false));
         Spinner sort = darkSpinner(list(
                 "Name A–Z", "Quantity high–low", "Rarity high–low"));
-        addField(controls, "Sort by", sort);
-        c.addView(controls, cardParams());
+        sort.setSelection(2);
+        sortBox.addView(sort, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT));
+
+        LinearLayout.LayoutParams rarityBoxParams =
+                new LinearLayout.LayoutParams(
+                        0,
+                        ViewGroup.LayoutParams.WRAP_CONTENT,
+                        1f);
+        rarityBoxParams.rightMargin = dp(6);
+        controlRow.addView(rarityBox, rarityBoxParams);
+
+        LinearLayout.LayoutParams sortBoxParams =
+                new LinearLayout.LayoutParams(
+                        0,
+                        ViewGroup.LayoutParams.WRAP_CONTENT,
+                        1f);
+        sortBoxParams.leftMargin = dp(6);
+        controlRow.addView(sortBox, sortBoxParams);
+
+        controls.addView(controlRow, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT));
+
+        LinearLayout.LayoutParams controlsCardParams = cardParams();
+        controlsCardParams.topMargin = dp(4);
+        controlsCardParams.bottomMargin = dp(6);
+        c.addView(controls, controlsCardParams);
 
         ScrollView inventoryScroll = new ScrollView(this);
         inventoryScroll.setFillViewport(false);
