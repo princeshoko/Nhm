@@ -707,6 +707,21 @@ public class MainActivity extends Activity {
         c.addView(pageHeading("My Profile", "Your Sharla profile and collection."));
 
         LinearLayout profile = card();
+
+        JSONObject p = meData.optJSONObject("profile");
+        if (p == null) p = new JSONObject();
+
+        JSONArray inventory = meData.optJSONArray("inventory");
+        int inventoryUnique = 0;
+        if (inventory != null) {
+            for (int i = 0; i < inventory.length(); i++) {
+                JSONObject entry = inventory.optJSONObject(i);
+                if (entry != null && entry.optInt("quantity", 0) > 0) {
+                    inventoryUnique++;
+                }
+            }
+        }
+
         LinearLayout person = new LinearLayout(this);
         person.setGravity(Gravity.CENTER_VERTICAL);
 
@@ -716,23 +731,14 @@ public class MainActivity extends Activity {
         avatar.setBackground(roundRect(PANEL2, 18, LINE, 1));
         person.addView(avatar, new LinearLayout.LayoutParams(dp(72), dp(72)));
 
-        JSONObject p = meData.optJSONObject("profile");
-        if (p == null) p = new JSONObject();
-        JSONObject stats = meData.optJSONObject("stats");
-        if (stats == null) stats = new JSONObject();
-
         LinearLayout names = new LinearLayout(this);
         names.setOrientation(LinearLayout.VERTICAL);
         names.setPadding(dp(14), 0, 0, 0);
 
-        // Use Discord's actual display name. The session currently does not expose
-        // Discord profile-decoration/name-effect metadata, so do not fake effects.
         String discordDisplayName = session.optString(
                 "display_name",
                 session.optString("username", "Discord User"));
         names.addView(text(discordDisplayName, 20, TEXT, true));
-
-        // Sharla title sits where the old @username line used to be, without a label.
         names.addView(text(
                 p.optString("title", "Noob Alert!"),
                 13,
@@ -748,6 +754,16 @@ public class MainActivity extends Activity {
         String avatarUrl = session.optString("avatar_url", "");
         if (!avatarUrl.isEmpty()) loadImage(avatarUrl, avatar);
 
+        Spinner race = darkSpinner(list("Person", "Place", "Thing", "Cat"));
+        setSpinnerValue(race, p.optString("race", "Person"));
+
+        Spinner clazz = darkSpinner(list(
+                "Dumpster Fire",
+                "Drama Llama",
+                "Steve",
+                "Has no Class"));
+        setSpinnerValue(clazz, p.optString("class", "Dumpster Fire"));
+
         profile.addView(spacer(12));
 
         LinearLayout profileStats = new LinearLayout(this);
@@ -758,7 +774,7 @@ public class MainActivity extends Activity {
         leftStats.setOrientation(LinearLayout.VERTICAL);
         leftStats.addView(text("Collection", 12, MUTED, false));
         leftStats.addView(text(
-                stats.optInt("unique_items", 0) + " unique items",
+                inventoryUnique + " unique items",
                 15,
                 TEXT,
                 true));
@@ -769,6 +785,11 @@ public class MainActivity extends Activity {
                 15,
                 TEXT,
                 true));
+        leftStats.addView(spacer(9));
+        leftStats.addView(text("Race", 12, MUTED, false));
+        leftStats.addView(race, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT));
 
         LinearLayout rightStats = new LinearLayout(this);
         rightStats.setOrientation(LinearLayout.VERTICAL);
@@ -785,6 +806,11 @@ public class MainActivity extends Activity {
                 15,
                 TEXT,
                 true));
+        rightStats.addView(spacer(9));
+        rightStats.addView(text("Class", 12, MUTED, false));
+        rightStats.addView(clazz, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT));
 
         LinearLayout.LayoutParams leftStatsParams =
                 new LinearLayout.LayoutParams(
@@ -873,63 +899,14 @@ public class MainActivity extends Activity {
         lootRowParams.bottomMargin = dp(6);
         profile.addView(lootRow, lootRowParams);
 
-        LinearLayout profileChoices = new LinearLayout(this);
-        profileChoices.setOrientation(LinearLayout.HORIZONTAL);
-        profileChoices.setGravity(Gravity.TOP);
-
-        LinearLayout raceCol = new LinearLayout(this);
-        raceCol.setOrientation(LinearLayout.VERTICAL);
-        raceCol.addView(label("Race"));
-        Spinner race = darkSpinner(list("Person", "Place", "Thing", "Cat"));
-        setSpinnerValue(race, p.optString("race", "Person"));
-        raceCol.addView(
-                race,
-                new LinearLayout.LayoutParams(
-                        ViewGroup.LayoutParams.MATCH_PARENT,
-                        ViewGroup.LayoutParams.WRAP_CONTENT));
-
-        LinearLayout classCol = new LinearLayout(this);
-        classCol.setOrientation(LinearLayout.VERTICAL);
-        classCol.addView(label("Class"));
-        Spinner clazz = darkSpinner(list("Dumpster Fire", "Drama Llama", "Steve", "Has no Class"));
-        setSpinnerValue(clazz, p.optString("class", "Dumpster Fire"));
-        classCol.addView(
-                clazz,
-                new LinearLayout.LayoutParams(
-                        ViewGroup.LayoutParams.MATCH_PARENT,
-                        ViewGroup.LayoutParams.WRAP_CONTENT));
-
-        LinearLayout.LayoutParams choiceColParams =
-                new LinearLayout.LayoutParams(
-                        0,
-                        ViewGroup.LayoutParams.WRAP_CONTENT,
-                        1f);
-        choiceColParams.rightMargin = dp(6);
-        profileChoices.addView(raceCol, choiceColParams);
-
-        LinearLayout.LayoutParams classColParams =
-                new LinearLayout.LayoutParams(
-                        0,
-                        ViewGroup.LayoutParams.WRAP_CONTENT,
-                        1f);
-        classColParams.leftMargin = dp(6);
-        profileChoices.addView(classCol, classColParams);
-
-        LinearLayout.LayoutParams choicesParams =
-                new LinearLayout.LayoutParams(
-                        ViewGroup.LayoutParams.MATCH_PARENT,
-                        ViewGroup.LayoutParams.WRAP_CONTENT);
-        choicesParams.topMargin = dp(8);
-        profile.addView(profileChoices, choicesParams);
-
         LinearLayout saveRow = new LinearLayout(this);
         saveRow.setOrientation(LinearLayout.HORIZONTAL);
-        saveRow.setGravity(Gravity.END);
+        saveRow.setGravity(Gravity.CENTER_HORIZONTAL);
 
         Button save = primaryButton("Save Profile");
         LinearLayout.LayoutParams saveParams =
                 new LinearLayout.LayoutParams(dp(150), dp(46));
-        saveParams.topMargin = dp(10);
+        saveParams.topMargin = dp(8);
         saveRow.addView(save, saveParams);
         profile.addView(
                 saveRow,
@@ -1449,7 +1426,7 @@ public class MainActivity extends Activity {
             TextView name = text(
                     item.optString("name", "Item"),
                     15,
-                    TEXT,
+                    rarityColor(rarity),
                     true);
             name.setSingleLine(false);
             itemCard.addView(
