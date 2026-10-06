@@ -899,6 +899,52 @@ public class MainActivity extends Activity {
         lootRowParams.bottomMargin = dp(6);
         profile.addView(lootRow, lootRowParams);
 
+        String lastLootItem = "";
+        String lastLootRarity = "";
+        if (loot != null) {
+            lastLootItem = loot.optString(
+                    "last_loot_item",
+                    loot.optString("last_item", ""));
+            lastLootRarity = loot.optString(
+                    "last_loot_rarity",
+                    loot.optString("last_rarity", ""));
+        }
+        if (lastLootItem.isEmpty()) {
+            lastLootItem = loadLastLootValue("item");
+            lastLootRarity = loadLastLootValue("rarity");
+        }
+
+        LinearLayout lastLootBox = new LinearLayout(this);
+        lastLootBox.setOrientation(LinearLayout.VERTICAL);
+        lastLootBox.setPadding(dp(10), dp(9), dp(10), dp(9));
+        lastLootBox.setBackground(roundRect(PANEL2, 12, LINE, 1));
+
+        lastLootBox.addView(text("Last loot claimed", 12, MUTED, true));
+        if (lastLootItem.isEmpty()) {
+            lastLootBox.addView(text("No loot claimed on this device yet.", 13, MUTED, false));
+        } else {
+            lastLootBox.addView(text(
+                    lootIcon(lastLootItem) + " " + lastLootItem,
+                    15,
+                    TEXT,
+                    true));
+            if (!lastLootRarity.isEmpty()) {
+                lastLootBox.addView(text(
+                        lastLootRarity,
+                        12,
+                        rarityColor(lastLootRarity),
+                        true));
+            }
+        }
+
+        LinearLayout.LayoutParams lastLootParams =
+                new LinearLayout.LayoutParams(
+                        ViewGroup.LayoutParams.MATCH_PARENT,
+                        ViewGroup.LayoutParams.WRAP_CONTENT);
+        lastLootParams.topMargin = dp(0);
+        lastLootParams.bottomMargin = dp(6);
+        profile.addView(lastLootBox, lastLootParams);
+
         LinearLayout saveRow = new LinearLayout(this);
         saveRow.setOrientation(LinearLayout.HORIZONTAL);
         saveRow.setGravity(Gravity.CENTER_HORIZONTAL);
@@ -998,6 +1044,7 @@ public class MainActivity extends Activity {
     }
 
     private void applyLootResultLocally(JSONObject result, String rarity, String itemName) {
+        saveLastLootValue(itemName, rarity);
         if (meData == null) return;
 
         JSONObject loot = meData.optJSONObject("loot");
@@ -1017,6 +1064,8 @@ public class MainActivity extends Activity {
             loot.put("cooldown_seconds", cooldown);
             loot.put("remaining_seconds", remaining);
             loot.put("server_time", now);
+            loot.put("last_loot_item", itemName);
+            loot.put("last_loot_rarity", rarity);
         } catch (Exception ignored) {}
 
         JSONObject profile = meData.optJSONObject("profile");
@@ -5394,6 +5443,32 @@ public class MainActivity extends Activity {
         return x.optInt("wins", 0) + "W • " + x.optInt("losses", 0) + "L • " + x.optInt("draws", 0) + "D";
     }
 
+
+    private String lastLootPreferenceKey(String field) {
+        String who = "default";
+        if (session != null) {
+            who = session.optString(
+                    "id",
+                    session.optString(
+                            "user_id",
+                            session.optString("username", "default")));
+        }
+        if (who == null || who.trim().isEmpty()) who = "default";
+        return "last_loot_" + who + "_" + field;
+    }
+
+    private String loadLastLootValue(String field) {
+        return getSharedPreferences("nerdhalla_loot", MODE_PRIVATE)
+                .getString(lastLootPreferenceKey(field), "");
+    }
+
+    private void saveLastLootValue(String item, String rarity) {
+        getSharedPreferences("nerdhalla_loot", MODE_PRIVATE)
+                .edit()
+                .putString(lastLootPreferenceKey("item"), item == null ? "" : item)
+                .putString(lastLootPreferenceKey("rarity"), rarity == null ? "" : rarity)
+                .apply();
+    }
 
     private String lootIcon(String name) {
         if (name == null) return "🎁";
