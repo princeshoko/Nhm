@@ -1635,37 +1635,239 @@ public class MainActivity extends Activity {
         LinearLayout c = scrollColumn();
         c.addView(pageHeading(
                 "Achievements",
-                "Unlocked achievements and progress you have already started."));
+                "Unlocked achievements and live progress from your Sharla collection."));
 
-        JSONArray arr = buildLiveAchievementList();
-        if (arr.length() == 0) {
+        JSONArray source = buildLiveAchievementList();
+        if (source.length() == 0) {
             c.addView(infoCard(
                     "Achievements",
-                    "No unlocked or in-progress achievements yet."));
+                    "No achievement data is available yet."));
             return wrapScroll(c);
         }
 
-        int shown = 0;
+        final String[] foundFilter = {"all"};
+        final String[] sortMode = {"owned"};
 
-        for (int i = 0; i < arr.length(); i++) {
-            JSONObject achievement = arr.optJSONObject(i);
+        LinearLayout controls = card();
+        controls.setPadding(dp(10), dp(8), dp(10), dp(8));
+
+        LinearLayout filterRow = new LinearLayout(this);
+        filterRow.setOrientation(LinearLayout.HORIZONTAL);
+        filterRow.setGravity(Gravity.CENTER_VERTICAL);
+
+        TextView allChip = achievementFilterChip("All", true);
+        TextView foundChip = achievementFilterChip("Found", false);
+        TextView notFoundChip = achievementFilterChip("Not Found", false);
+
+        LinearLayout.LayoutParams filterParams =
+                new LinearLayout.LayoutParams(
+                        0,
+                        dp(36),
+                        1f);
+        filterParams.rightMargin = dp(4);
+        filterRow.addView(allChip, filterParams);
+
+        LinearLayout.LayoutParams foundParams =
+                new LinearLayout.LayoutParams(
+                        0,
+                        dp(36),
+                        1f);
+        foundParams.leftMargin = dp(2);
+        foundParams.rightMargin = dp(2);
+        filterRow.addView(foundChip, foundParams);
+
+        LinearLayout.LayoutParams notFoundParams =
+                new LinearLayout.LayoutParams(
+                        0,
+                        dp(36),
+                        1f);
+        notFoundParams.leftMargin = dp(4);
+        filterRow.addView(notFoundChip, notFoundParams);
+
+        controls.addView(filterRow);
+
+        LinearLayout sortRow = new LinearLayout(this);
+        sortRow.setOrientation(LinearLayout.HORIZONTAL);
+        sortRow.setGravity(Gravity.CENTER_VERTICAL);
+
+        TextView ownedSort = achievementFilterChip("Owned first", true);
+        TextView raritySort = achievementFilterChip("Rarity", false);
+
+        LinearLayout.LayoutParams ownedSortParams =
+                new LinearLayout.LayoutParams(
+                        0,
+                        dp(34),
+                        1f);
+        ownedSortParams.rightMargin = dp(4);
+        sortRow.addView(ownedSort, ownedSortParams);
+
+        LinearLayout.LayoutParams raritySortParams =
+                new LinearLayout.LayoutParams(
+                        0,
+                        dp(34),
+                        1f);
+        raritySortParams.leftMargin = dp(4);
+        sortRow.addView(raritySort, raritySortParams);
+
+        LinearLayout.LayoutParams sortRowParams =
+                new LinearLayout.LayoutParams(
+                        ViewGroup.LayoutParams.MATCH_PARENT,
+                        ViewGroup.LayoutParams.WRAP_CONTENT);
+        sortRowParams.topMargin = dp(6);
+        controls.addView(sortRow, sortRowParams);
+
+        LinearLayout.LayoutParams controlsParams = cardParams();
+        controlsParams.topMargin = dp(2);
+        controlsParams.bottomMargin = dp(5);
+        c.addView(controls, controlsParams);
+
+        LinearLayout list = new LinearLayout(this);
+        list.setOrientation(LinearLayout.VERTICAL);
+        c.addView(list, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT));
+
+        Runnable refresh = () -> renderAchievementList(
+                list,
+                source,
+                foundFilter[0],
+                sortMode[0]);
+
+        allChip.setOnClickListener(v -> {
+            foundFilter[0] = "all";
+            styleAchievementFilterChip(allChip, true);
+            styleAchievementFilterChip(foundChip, false);
+            styleAchievementFilterChip(notFoundChip, false);
+            refresh.run();
+        });
+
+        foundChip.setOnClickListener(v -> {
+            foundFilter[0] = "found";
+            styleAchievementFilterChip(allChip, false);
+            styleAchievementFilterChip(foundChip, true);
+            styleAchievementFilterChip(notFoundChip, false);
+            refresh.run();
+        });
+
+        notFoundChip.setOnClickListener(v -> {
+            foundFilter[0] = "not_found";
+            styleAchievementFilterChip(allChip, false);
+            styleAchievementFilterChip(foundChip, false);
+            styleAchievementFilterChip(notFoundChip, true);
+            refresh.run();
+        });
+
+        ownedSort.setOnClickListener(v -> {
+            sortMode[0] = "owned";
+            styleAchievementFilterChip(ownedSort, true);
+            styleAchievementFilterChip(raritySort, false);
+            refresh.run();
+        });
+
+        raritySort.setOnClickListener(v -> {
+            sortMode[0] = "rarity";
+            styleAchievementFilterChip(ownedSort, false);
+            styleAchievementFilterChip(raritySort, true);
+            refresh.run();
+        });
+
+        refresh.run();
+        return wrapScroll(c);
+    }
+
+    private TextView achievementFilterChip(String label, boolean selected) {
+        TextView t = text(
+                label,
+                11,
+                selected ? TEXT : MUTED,
+                selected);
+        t.setGravity(Gravity.CENTER);
+        t.setPadding(dp(7), dp(4), dp(7), dp(4));
+        t.setBackground(roundRect(
+                selected ? Color.rgb(55, 38, 78) : PANEL2,
+                12,
+                selected ? PURPLE : LINE,
+                1));
+        return t;
+    }
+
+    private void styleAchievementFilterChip(TextView t, boolean selected) {
+        t.setTextColor(selected ? TEXT : MUTED);
+        t.setTypeface(
+                Typeface.DEFAULT,
+                selected ? Typeface.BOLD : Typeface.NORMAL);
+        t.setBackground(roundRect(
+                selected ? Color.rgb(55, 38, 78) : PANEL2,
+                12,
+                selected ? PURPLE : LINE,
+                1));
+    }
+
+    private void renderAchievementList(
+            LinearLayout parent,
+            JSONArray source,
+            String foundFilter,
+            String sortMode) {
+
+        parent.removeAllViews();
+
+        List<JSONObject> items = new ArrayList<>();
+
+        for (int i = 0; i < source.length(); i++) {
+            JSONObject achievement = source.optJSONObject(i);
             if (achievement == null) continue;
 
-            boolean hasLiveUnlocked = achievement.has("unlocked");
-            boolean unlocked = hasLiveUnlocked
-                    ? achievement.optBoolean("unlocked", false)
-                    : true; // Old portal payloads only contained earned ledger rows.
+            boolean unlocked = achievement.optBoolean("unlocked", false);
 
-            boolean hasCurrent = achievement.has("current")
-                    && !achievement.isNull("current");
-            boolean hasTarget = achievement.has("target")
-                    && !achievement.isNull("target");
+            if ("found".equals(foundFilter) && !unlocked) continue;
+            if ("not_found".equals(foundFilter) && unlocked) continue;
 
-            double current = hasCurrent ? achievement.optDouble("current", 0) : 0;
-            double target = hasTarget ? achievement.optDouble("target", 0) : 0;
-            boolean started = hasCurrent && hasTarget && target > 0 && current > 0;
+            items.add(achievement);
+        }
 
-            if (!unlocked && !started) continue;
+        if ("rarity".equals(sortMode)) {
+            items.sort((left, right) -> {
+                int rarityCompare = Integer.compare(
+                        achievementRarityRank(right.optString("key", "")),
+                        achievementRarityRank(left.optString("key", "")));
+                if (rarityCompare != 0) return rarityCompare;
+
+                int foundCompare = Boolean.compare(
+                        right.optBoolean("unlocked", false),
+                        left.optBoolean("unlocked", false));
+                if (foundCompare != 0) return foundCompare;
+
+                return left.optString("name", "")
+                        .compareToIgnoreCase(right.optString("name", ""));
+            });
+        } else {
+            items.sort((left, right) -> {
+                int foundCompare = Boolean.compare(
+                        right.optBoolean("unlocked", false),
+                        left.optBoolean("unlocked", false));
+                if (foundCompare != 0) return foundCompare;
+
+                double leftPercent = left.optDouble("percent", 0);
+                double rightPercent = right.optDouble("percent", 0);
+                int progressCompare = Double.compare(
+                        rightPercent,
+                        leftPercent);
+                if (progressCompare != 0) return progressCompare;
+
+                return left.optString("name", "")
+                        .compareToIgnoreCase(right.optString("name", ""));
+            });
+        }
+
+        if (items.isEmpty()) {
+            parent.addView(infoCard(
+                    "Achievements",
+                    "No achievements match this filter."));
+            return;
+        }
+
+        for (JSONObject achievement : items) {
+            boolean unlocked = achievement.optBoolean("unlocked", false);
 
             String key = achievement.optString("key", "");
             String name = achievement.optString("name", "");
@@ -1675,6 +1877,10 @@ public class MainActivity extends Activity {
 
             String emoji = achievement.optString("emoji", "");
             if (emoji.isEmpty()) emoji = achievementEmoji(key);
+
+            double current = achievement.optDouble("current", 0);
+            double target = achievement.optDouble("target", 0);
+            double percent = achievement.optDouble("percent", 0);
 
             LinearLayout itemCard = card();
             itemCard.setPadding(dp(12), dp(8), dp(12), dp(8));
@@ -1703,11 +1909,7 @@ public class MainActivity extends Activity {
 
             itemCard.addView(top);
 
-            if (hasCurrent && hasTarget && target > 0) {
-                double percent = achievement.has("percent")
-                        ? achievement.optDouble("percent", 0)
-                        : Math.min(100.0, (current / target) * 100.0);
-
+            if (target > 0) {
                 String progressText = formatAchievementNumber(current)
                         + " / " + formatAchievementNumber(target)
                         + "  •  " + trim1(percent) + "%";
@@ -1731,17 +1933,19 @@ public class MainActivity extends Activity {
             LinearLayout.LayoutParams compact = cardParams();
             compact.topMargin = dp(2);
             compact.bottomMargin = dp(2);
-            c.addView(itemCard, compact);
-            shown++;
+            parent.addView(itemCard, compact);
         }
+    }
 
-        if (shown == 0) {
-            c.addView(infoCard(
-                    "Achievements",
-                    "No unlocked or in-progress achievements yet."));
+    private int achievementRarityRank(String key) {
+        switch (key) {
+            case "complete_mythic": return 5;
+            case "complete_legendary": return 4;
+            case "complete_rare": return 3;
+            case "complete_uncommon": return 2;
+            case "complete_common": return 1;
+            default: return 0;
         }
-
-        return wrapScroll(c);
     }
 
     private JSONArray buildLiveAchievementList() {
