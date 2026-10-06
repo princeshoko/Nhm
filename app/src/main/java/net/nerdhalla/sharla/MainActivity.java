@@ -1637,8 +1637,8 @@ public class MainActivity extends Activity {
                 "Achievements",
                 "Unlocked achievements and progress you have already started."));
 
-        JSONArray arr = meData.optJSONArray("achievements");
-        if (arr == null || arr.length() == 0) {
+        JSONArray arr = buildLiveAchievementList();
+        if (arr.length() == 0) {
             c.addView(infoCard(
                     "Achievements",
                     "No unlocked or in-progress achievements yet."));
@@ -1742,6 +1742,218 @@ public class MainActivity extends Activity {
         }
 
         return wrapScroll(c);
+    }
+
+    private JSONArray buildLiveAchievementList() {
+        JSONArray out = new JSONArray();
+        JSONArray ledger = meData.optJSONArray("achievements");
+        JSONArray inventory = meData.optJSONArray("inventory");
+        JSONObject profile = meData.optJSONObject("profile");
+        JSONObject shop = meData.optJSONObject("shop");
+
+        if (inventory == null) inventory = new JSONArray();
+        if (profile == null) profile = new JSONObject();
+
+        int totalItems = 0;
+        int uniqueItems = 0;
+        int duplicateItems = 0;
+        int largestStack = 0;
+
+        int commonOwned = 0;
+        int uncommonOwned = 0;
+        int rareOwned = 0;
+        int legendaryOwned = 0;
+        int mythicOwned = 0;
+
+        for (int i = 0; i < inventory.length(); i++) {
+            JSONObject item = inventory.optJSONObject(i);
+            if (item == null) continue;
+
+            int qty = Math.max(0, item.optInt("quantity", 0));
+            if (qty <= 0) continue;
+
+            String rarity = item.optString("rarity", "Common");
+            String name = item.optString("name", "");
+
+            totalItems += qty;
+            uniqueItems++;
+            duplicateItems += Math.max(0, qty - 1);
+            largestStack = Math.max(largestStack, qty);
+
+            // Shop Exclusives do not count toward normal loot-set completion.
+            if (isShopExclusive(rarity, name, shop)) continue;
+
+            switch (rarity) {
+                case "Common": commonOwned++; break;
+                case "Uncommon": uncommonOwned++; break;
+                case "Rare": rareOwned++; break;
+                case "Legendary": legendaryOwned++; break;
+                case "Mythic": mythicOwned++; break;
+                default: break;
+            }
+        }
+
+        int lootOwned =
+                commonOwned +
+                uncommonOwned +
+                rareOwned +
+                legendaryOwned +
+                mythicOwned;
+
+        int shopOwned = shop == null ? 0 : shop.optInt("owned_unique", 0);
+        int shopTotal = shop == null ? 0 : shop.optInt("total", 0);
+        int shopHalfTarget = Math.max(1, (shopTotal + 1) / 2);
+        long tokens = profile.optLong("horse_tokens", 0);
+
+        addLiveAchievement(out, ledger,
+                "first_find", "First Find", "🎁",
+                "Collect your first loot item.",
+                Math.min(totalItems, 1), 1);
+
+        addLiveAchievement(out, ledger,
+                "unique_10", "Collector I", "🧩",
+                "Own 10 unique items.",
+                Math.min(uniqueItems, 10), 10);
+        addLiveAchievement(out, ledger,
+                "unique_25", "Collector II", "🏺",
+                "Own 25 unique items.",
+                Math.min(uniqueItems, 25), 25);
+        addLiveAchievement(out, ledger,
+                "unique_50", "Collector III", "🏆",
+                "Own 50 unique items.",
+                Math.min(uniqueItems, 50), 50);
+
+        // These totals come directly from Sharla's current LOOT_TABLES.
+        addLiveAchievement(out, ledger,
+                "complete_common", "Common Knowledge", "⚪",
+                "Collect every Common loot item.",
+                Math.min(commonOwned, 25), 25);
+        addLiveAchievement(out, ledger,
+                "complete_uncommon", "Uncommonly Dedicated", "🟢",
+                "Collect every Uncommon loot item.",
+                Math.min(uncommonOwned, 17), 17);
+        addLiveAchievement(out, ledger,
+                "complete_rare", "Rare Specimen", "🔵",
+                "Collect every Rare loot item.",
+                Math.min(rareOwned, 10), 10);
+        addLiveAchievement(out, ledger,
+                "complete_legendary", "Legendary Collector", "🟠",
+                "Collect every Legendary loot item.",
+                Math.min(legendaryOwned, 12), 12);
+        addLiveAchievement(out, ledger,
+                "complete_mythic", "Mythic Completionist", "🟣",
+                "Collect every Mythic loot item.",
+                Math.min(mythicOwned, 10), 10);
+
+        addLiveAchievement(out, ledger,
+                "loot_master", "Loot Master", "👑",
+                "Collect every normal loot item in Sharla.",
+                Math.min(lootOwned, 74), 74);
+
+        addLiveAchievement(out, ledger,
+                "first_shop", "Window Shopper No More", "🛍️",
+                "Own your first Sharla Shop Exclusive.",
+                Math.min(shopOwned, 1), 1);
+
+        if (shopTotal > 0) {
+            addLiveAchievement(out, ledger,
+                    "shop_half", "Exclusive Taste", "💎",
+                    "Own at least half of Sharla's Shop Exclusives.",
+                    Math.min(shopOwned, shopHalfTarget), shopHalfTarget);
+            addLiveAchievement(out, ledger,
+                    "shop_complete", "Sharla's Favorite Customer", "🛒",
+                    "Own every Sharla Shop Exclusive.",
+                    Math.min(shopOwned, shopTotal), shopTotal);
+        }
+
+        addLiveAchievement(out, ledger,
+                "duplicates_5", "Pack Rat", "📦",
+                "Own 5 duplicate copies across your inventory.",
+                Math.min(duplicateItems, 5), 5);
+        addLiveAchievement(out, ledger,
+                "duplicates_20", "Hoarder", "🗃️",
+                "Own 20 duplicate copies across your inventory.",
+                Math.min(duplicateItems, 20), 20);
+        addLiveAchievement(out, ledger,
+                "stack_5", "Why Do You Have Five of These?", "🫠",
+                "Own at least 5 copies of one exact item.",
+                Math.min(largestStack, 5), 5);
+
+        addLiveAchievement(out, ledger,
+                "tokens_100", "Pocket Change", "🪙",
+                "Hold 100 Horse Tokens at once.",
+                Math.min(tokens, 100L), 100);
+        addLiveAchievement(out, ledger,
+                "tokens_500", "Horse Token Hoarder", "🐴",
+                "Hold 500 Horse Tokens at once.",
+                Math.min(tokens, 500L), 500);
+        addLiveAchievement(out, ledger,
+                "tokens_1000", "Sharla's Bank", "🏦",
+                "Hold 1,000 Horse Tokens at once.",
+                Math.min(tokens, 1000L), 1000);
+
+        return out;
+    }
+
+    private boolean isShopExclusive(String rarity, String name, JSONObject shop) {
+        if (shop == null) return false;
+        JSONArray items = shop.optJSONArray("items");
+        if (items == null) return false;
+
+        for (int i = 0; i < items.length(); i++) {
+            JSONObject item = items.optJSONObject(i);
+            if (item == null) continue;
+            if (rarity.equals(item.optString("rarity", "")) &&
+                    name.equals(item.optString("name", ""))) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private boolean achievementWasEarned(JSONArray ledger, String key) {
+        if (ledger == null || key == null) return false;
+        for (int i = 0; i < ledger.length(); i++) {
+            JSONObject item = ledger.optJSONObject(i);
+            if (item != null && key.equals(item.optString("key", ""))) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private void addLiveAchievement(
+            JSONArray out,
+            JSONArray ledger,
+            String key,
+            String name,
+            String emoji,
+            String description,
+            double current,
+            double target) {
+
+        if (target <= 0) return;
+
+        boolean unlocked =
+                achievementWasEarned(ledger, key) ||
+                current >= target;
+
+        double percent = Math.min(
+                100.0,
+                Math.max(0.0, (current / target) * 100.0));
+
+        JSONObject item = new JSONObject();
+        try {
+            item.put("key", key);
+            item.put("name", name);
+            item.put("emoji", emoji);
+            item.put("description", description);
+            item.put("unlocked", unlocked);
+            item.put("current", current);
+            item.put("target", target);
+            item.put("percent", percent);
+            out.put(item);
+        } catch (Exception ignored) {}
     }
 
     private String formatAchievementNumber(double value) {
