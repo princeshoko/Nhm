@@ -461,6 +461,17 @@ public class MainActivity extends Activity {
         });
         bar.addView(refresh, new LinearLayout.LayoutParams(dp(48), dp(48)));
 
+        Button logout = secondaryButton("Logout");
+        logout.setPadding(dp(8), 0, dp(8), 0);
+        LinearLayout.LayoutParams logoutParams =
+                new LinearLayout.LayoutParams(dp(82), dp(48));
+        logoutParams.leftMargin = dp(6);
+        bar.addView(logout, logoutParams);
+        logout.setOnClickListener(v -> confirm(
+                "Log out of Nerdhalla?",
+                "This signs this app out of Nerdhalla. You can log back in with Discord at any time.",
+                this::logoutFromApp));
+
         return bar;
     }
 
@@ -2618,6 +2629,39 @@ public class MainActivity extends Activity {
                     toast(e.getMessage());
                 });
             }
+        });
+    }
+
+    private void logoutFromApp() {
+        showBusy(true);
+        CookieManager cookies = CookieManager.getInstance();
+        cookies.removeAllCookies(removed -> {
+            cookies.flush();
+            main.post(() -> {
+                api.setCsrfToken("");
+                session = null;
+                meData = null;
+                adminAccess = null;
+                guildData = null;
+                currentGuildId = "";
+                currentTop = "my";
+                currentMySection = "profile";
+                currentAdminSection = "health";
+                selectedMemberId = "";
+                selectedMemberName = "";
+                memberRoleObjects = new ArrayList<>();
+                activeMenuScroller = null;
+                pendingMenuTransitionDirection = 0;
+                menuTransitionRunning = false;
+                contentHost = null;
+                busy = null;
+                titleText = null;
+                myNav = null;
+                adminNav = null;
+                nativeRoot = null;
+                showLogin();
+                toast("Logged out of Nerdhalla.");
+            });
         });
     }
 
