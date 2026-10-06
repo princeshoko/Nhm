@@ -2704,13 +2704,32 @@ public class MainActivity extends Activity {
             row.addView(text(item.optString("created_at", "") + "  •  " +
                     humanBytes(item.optLong("size", 0)), 12, MUTED, false));
 
+            LinearLayout backupActions = new LinearLayout(this);
+            backupActions.setOrientation(LinearLayout.HORIZONTAL);
+            backupActions.setGravity(Gravity.END);
+
             Button download = secondaryButton("Download");
-            row.addView(download, buttonParams());
+            download.setTextSize(12);
+            LinearLayout.LayoutParams downloadParams =
+                    new LinearLayout.LayoutParams(0, dp(38), 1f);
+            downloadParams.rightMargin = dp(5);
+            backupActions.addView(download, downloadParams);
             download.setOnClickListener(v -> startBackupDownload(name));
 
             Button restore = dangerButton("Restore");
-            row.addView(restore, buttonParams());
+            restore.setTextSize(12);
+            LinearLayout.LayoutParams restoreParams =
+                    new LinearLayout.LayoutParams(0, dp(38), 1f);
+            restoreParams.leftMargin = dp(5);
+            backupActions.addView(restore, restoreParams);
             restore.setOnClickListener(v -> promptRestoreBackup(name, holder));
+
+            LinearLayout.LayoutParams actionRowParams =
+                    new LinearLayout.LayoutParams(
+                            ViewGroup.LayoutParams.MATCH_PARENT,
+                            ViewGroup.LayoutParams.WRAP_CONTENT);
+            actionRowParams.topMargin = dp(6);
+            row.addView(backupActions, actionRowParams);
 
             holder.addView(row, cardParams());
         }
@@ -2814,10 +2833,29 @@ public class MainActivity extends Activity {
             value.setInputType(InputType.TYPE_CLASS_NUMBER);
             addField(stats, "Final displayed value", value);
 
+            LinearLayout correctionButtons = new LinearLayout(this);
+            correctionButtons.setOrientation(LinearLayout.HORIZONTAL);
+
             Button set = primaryButton("Apply Correction");
-            stats.addView(set, buttonParams());
+            set.setTextSize(12);
+            LinearLayout.LayoutParams setParams =
+                    new LinearLayout.LayoutParams(0, dp(40), 1f);
+            setParams.rightMargin = dp(5);
+            correctionButtons.addView(set, setParams);
+
             Button reset = secondaryButton("Reset Correction");
-            stats.addView(reset, buttonParams());
+            reset.setTextSize(12);
+            LinearLayout.LayoutParams resetParams =
+                    new LinearLayout.LayoutParams(0, dp(40), 1f);
+            resetParams.leftMargin = dp(5);
+            correctionButtons.addView(reset, resetParams);
+
+            LinearLayout.LayoutParams correctionRowParams =
+                    new LinearLayout.LayoutParams(
+                            ViewGroup.LayoutParams.MATCH_PARENT,
+                            ViewGroup.LayoutParams.WRAP_CONTENT);
+            correctionRowParams.topMargin = dp(6);
+            stats.addView(correctionButtons, correctionRowParams);
 
             set.setOnClickListener(v -> {
                 String scopeValue = homeworldScopeValue(scope);
@@ -2960,15 +2998,61 @@ public class MainActivity extends Activity {
         if (db == null) db = new JSONObject();
 
         holder.addView(sectionTitle("Database & Head Pool"));
-        holder.addView(statLine("Head Pool",
-                data.optBoolean("discord_ready", false) ? "Online / ready" : "Not ready"));
-        if (data.has("latency_ms")) {
-            holder.addView(statLine("Latency", data.optInt("latency_ms", 0) + " ms"));
-        }
-        holder.addView(statLine("MySQL",
+
+        holder.addView(statLine(
+                "MySQL",
                 db.optBoolean("ok", false)
-                        ? "Connected • " + db.optString("database", "") + " • " + db.optString("version", "")
+                        ? "Connected • " + db.optString("database", "") +
+                                " • " + db.optString("version", "")
                         : "Error • " + db.optString("error", "unknown")));
+
+        LinearLayout headpoolRow = new LinearLayout(this);
+        headpoolRow.setOrientation(LinearLayout.HORIZONTAL);
+        headpoolRow.setGravity(Gravity.TOP);
+
+        LinearLayout headpoolLeft = new LinearLayout(this);
+        headpoolLeft.setOrientation(LinearLayout.VERTICAL);
+        headpoolLeft.addView(text("Head Pool", 11, MUTED, false));
+        boolean headpoolReady = data.optBoolean("discord_ready", false);
+        headpoolLeft.addView(text(
+                headpoolReady ? "● Ready" : "● Not ready",
+                13,
+                headpoolReady ? GREEN : RED,
+                true));
+
+        LinearLayout headpoolRight = new LinearLayout(this);
+        headpoolRight.setOrientation(LinearLayout.VERTICAL);
+        headpoolRight.addView(text("Latency", 11, MUTED, false));
+        headpoolRight.addView(text(
+                data.has("latency_ms")
+                        ? data.optInt("latency_ms", 0) + " ms"
+                        : "—",
+                13,
+                TEXT,
+                true));
+
+        LinearLayout.LayoutParams hpLeftParams =
+                new LinearLayout.LayoutParams(
+                        0,
+                        ViewGroup.LayoutParams.WRAP_CONTENT,
+                        1f);
+        hpLeftParams.rightMargin = dp(8);
+        headpoolRow.addView(headpoolLeft, hpLeftParams);
+
+        LinearLayout.LayoutParams hpRightParams =
+                new LinearLayout.LayoutParams(
+                        0,
+                        ViewGroup.LayoutParams.WRAP_CONTENT,
+                        1f);
+        hpRightParams.leftMargin = dp(8);
+        headpoolRow.addView(headpoolRight, hpRightParams);
+
+        LinearLayout.LayoutParams hpRowParams =
+                new LinearLayout.LayoutParams(
+                        ViewGroup.LayoutParams.MATCH_PARENT,
+                        ViewGroup.LayoutParams.WRAP_CONTENT);
+        hpRowParams.topMargin = dp(6);
+        holder.addView(headpoolRow, hpRowParams);
 
         holder.addView(spacer(10));
         holder.addView(sectionTitle("Active / paused games"));
@@ -3967,20 +4051,49 @@ public class MainActivity extends Activity {
         Spinner verified = objectSpinnerWithBlank(roles, "name", settings.optString("verified_role_id", ""));
         Spinner tagRole = objectSpinnerWithBlank(roles, "name", settings.optString("tag_role_id", ""));
 
-        addField(form, "Support channel", support);
-        addField(form, "Personal-room category", room);
-        addField(form, "Temporary voice hub", voice);
-        addField(form, "Vote reminder channel", vote);
-        addField(form, "Meme channel", meme);
-        addField(form, "Verified/member role", verified);
-        addField(form, "Tag role", tagRole);
-
         EditText tagText = edit("Tag text", false);
         tagText.setText(settings.optString("tag_text", ""));
-        addField(form, "Tag text", tagText);
         EditText tagName = edit("Tag display name", false);
         tagName.setText(settings.optString("tag_name", ""));
-        addField(form, "Tag display name", tagName);
+
+        LinearLayout settingsColumns = new LinearLayout(this);
+        settingsColumns.setOrientation(LinearLayout.HORIZONTAL);
+        settingsColumns.setGravity(Gravity.TOP);
+
+        LinearLayout settingsLeft = new LinearLayout(this);
+        settingsLeft.setOrientation(LinearLayout.VERTICAL);
+        addField(settingsLeft, "Support channel", support);
+        addField(settingsLeft, "Temporary voice hub", voice);
+        addField(settingsLeft, "Meme channel", meme);
+        addField(settingsLeft, "Tag role", tagRole);
+        addField(settingsLeft, "Tag text", tagText);
+
+        LinearLayout settingsRight = new LinearLayout(this);
+        settingsRight.setOrientation(LinearLayout.VERTICAL);
+        addField(settingsRight, "Personal-room category", room);
+        addField(settingsRight, "Vote reminder channel", vote);
+        addField(settingsRight, "Verified/member role", verified);
+        addField(settingsRight, "Tag display name", tagName);
+
+        LinearLayout.LayoutParams settingsLeftParams =
+                new LinearLayout.LayoutParams(
+                        0,
+                        ViewGroup.LayoutParams.WRAP_CONTENT,
+                        1f);
+        settingsLeftParams.rightMargin = dp(6);
+        settingsColumns.addView(settingsLeft, settingsLeftParams);
+
+        LinearLayout.LayoutParams settingsRightParams =
+                new LinearLayout.LayoutParams(
+                        0,
+                        ViewGroup.LayoutParams.WRAP_CONTENT,
+                        1f);
+        settingsRightParams.leftMargin = dp(6);
+        settingsColumns.addView(settingsRight, settingsRightParams);
+
+        form.addView(settingsColumns, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT));
 
         Switch rooms = switchRow("🏠 Personal Rooms", settings.optBoolean("rooms_enabled", false));
         Switch temp = switchRow("🔊 Temporary Voice", settings.optBoolean("voice_rooms_enabled", false));
