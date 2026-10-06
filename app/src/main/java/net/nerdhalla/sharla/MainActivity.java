@@ -251,6 +251,13 @@ public class MainActivity extends Activity {
                 !"auth".equalsIgnoreCase(data.getHost())) {
             return false;
         }
+        String cancelled = data.getQueryParameter("cancelled");
+        if ("1".equals(cancelled) || "true".equalsIgnoreCase(cancelled)) {
+            intent.setData(null);
+            showLogin();
+            return true;
+        }
+
         String code = data.getQueryParameter("code");
         if (code == null || code.trim().isEmpty()) {
             showLogin();
