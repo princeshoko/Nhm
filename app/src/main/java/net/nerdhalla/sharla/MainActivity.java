@@ -1825,14 +1825,27 @@ public class MainActivity extends Activity {
 
         for (JSONObject item : items) {
             String rarity = item.optString("rarity", "Unknown");
+            String itemNameText = item.optString("name", "Item");
+            boolean customItem = isCustomInventoryItem(itemNameText);
 
             LinearLayout itemCard = card();
             itemCard.setOrientation(LinearLayout.HORIZONTAL);
             itemCard.setGravity(Gravity.CENTER_VERTICAL);
             itemCard.setPadding(dp(12), dp(7), dp(8), dp(7));
 
+            if (customItem) {
+                ImageView customIcon = new ImageView(this);
+                customIcon.setImageResource(R.drawable.custom_item_icon);
+                customIcon.setScaleType(ImageView.ScaleType.CENTER_INSIDE);
+
+                LinearLayout.LayoutParams customIconParams =
+                        new LinearLayout.LayoutParams(dp(30), dp(30));
+                customIconParams.rightMargin = dp(8);
+                itemCard.addView(customIcon, customIconParams);
+            }
+
             TextView name = text(
-                    lootIcon(item.optString("name", "Item")) + " " + item.optString("name", "Item"),
+                    (customItem ? "" : lootIcon(itemNameText) + " ") + itemNameText,
                     15,
                     rarityColor(rarity),
                     true);
@@ -5674,6 +5687,11 @@ public class MainActivity extends Activity {
             case "White Pants": return "🤍";
             default: return "🎁";
         }
+    }
+
+    private boolean isCustomInventoryItem(String name) {
+        if (name == null || name.trim().isEmpty()) return false;
+        return "🎁".equals(lootIcon(name.trim()));
     }
 
     private int tokenValue(String rarity) {
