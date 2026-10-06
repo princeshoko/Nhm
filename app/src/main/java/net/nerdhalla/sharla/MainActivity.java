@@ -1039,11 +1039,10 @@ public class MainActivity extends Activity {
                         } catch (Exception ignored) {}
 
                         post("shop_purchase", body, result -> {
+                            applyShopPurchaseLocally(result, rarity, name, price);
                             toast("🛍️ Purchased " + result.optString("item", name) +
                                     " for " + result.optInt("price", price) + " Horse Tokens.");
-                            meData = null;
-                            meDataFetchedElapsed = 0L;
-                            loadMySharla();
+                            renderMySharla();
                         });
                     }));
 
@@ -1054,6 +1053,94 @@ public class MainActivity extends Activity {
         }
 
         return wrapScroll(c);
+    }
+
+    private void applyShopPurchaseLocally(
+            JSONObject result, String rarity, String itemName, int fallbackPrice) {
+        if (meData == null) return;
+
+        JSONObject returnedShop = result.optJSONObject("shop");
+        if (returnedShop != null) {
+            try {
+                meData.put("shop", new JSONObject(returnedShop.toString()));
+            } catch (Exception ignored) {}
+        } else {
+            JSONObject shop = meData.optJSONObject("shop");
+            if (shop != null) {
+                int price = result.optInt("price", fallbackPrice);
+                long oldBalance = shop.optLong("balance", 0);
+                long newBalance = result.has("balance")
+                        ? result.optLong("balance", Math.max(0L, oldBalance - price))
+                        : Math.max(0L, oldBalance - price);
+                try { shop.put("balance", newBalance); } catch (Exception ignored) {}
+
+                JSONArray items = shop.optJSONArray("items");
+                if (items != null) {
+                    for (int i = 0; i < items.length(); i++) {
+                        JSONObject item = items.optJSONObject(i);
+                        if (item == null) continue;
+                        if (rarity.equals(item.optString("rarity", "")) &&
+                                itemName.equals(item.optString("name", ""))) {
+                            int owned = result.has("owned")
+                                    ? result.optInt("owned", item.optInt("owned", 0) + 1)
+                                    : item.optInt("owned", 0) + 1;
+                            try { item.put("owned", owned); } catch (Exception ignored) {}
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+
+        JSONObject profile = meData.optJSONObject("profile");
+        if (profile != null && result.has("balance")) {
+            try {
+                profile.put("horse_tokens",
+                        result.optLong("balance", profile.optLong("horse_tokens", 0)));
+            } catch (Exception ignored) {}
+        }
+
+        // Keep Inventory immediately in sync too, without requiring another network request.
+        JSONArray inventory = meData.optJSONArray("inventory");
+        boolean found = false;
+        if (inventory != null) {
+            for (int i = 0; i < inventory.length(); i++) {
+                JSONObject entry = inventory.optJSONObject(i);
+                if (entry == null) continue;
+                if (rarity.equals(entry.optString("rarity", "")) &&
+                        itemName.equals(entry.optString("name", ""))) {
+                    try { entry.put("quantity", entry.optInt("quantity", 0) + 1); }
+                    catch (Exception ignored) {}
+                    found = true;
+                    break;
+                }
+            }
+            if (!found) {
+                JSONObject entry = new JSONObject();
+                try {
+                    entry.put("rarity", rarity);
+                    entry.put("name", itemName);
+                    entry.put("quantity", 1);
+                    inventory.put(entry);
+                } catch (Exception ignored) {}
+            }
+        }
+
+        JSONObject stats = meData.optJSONObject("stats");
+        if (stats != null) {
+            try {
+                stats.put("total_items", stats.optInt("total_items", 0) + 1);
+                if (found) {
+                    stats.put("duplicate_items", stats.optInt("duplicate_items", 0) + 1);
+                    stats.put("duplicate_sell_value",
+                            stats.optInt("duplicate_sell_value", 0) + tokenValue(rarity));
+                } else {
+                    stats.put("unique_items", stats.optInt("unique_items", 0) + 1);
+                }
+            } catch (Exception ignored) {}
+        }
+
+        meDataFetchedElapsed = SystemClock.elapsedRealtime();
     }
 
     private View renderHomeworldsPage() {
