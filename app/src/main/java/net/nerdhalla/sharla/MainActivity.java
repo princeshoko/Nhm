@@ -2504,8 +2504,16 @@ public class MainActivity extends Activity {
         };
         roleSpinner.setOnItemSelectedListener(new SimpleItemSelectedListener(position -> syncRole.run()));
 
+        LinearLayout roleAccessButtons = new LinearLayout(this);
+        roleAccessButtons.setOrientation(LinearLayout.HORIZONTAL);
+
         Button save = primaryButton("Save Role Access");
-        holder.addView(save, buttonParams());
+        save.setTextSize(12);
+        LinearLayout.LayoutParams saveRoleParams =
+                new LinearLayout.LayoutParams(0, dp(40), 1f);
+        saveRoleParams.rightMargin = dp(5);
+        roleAccessButtons.addView(save, saveRoleParams);
+
         save.setOnClickListener(v -> {
             int pos = roleSpinner.getSelectedItemPosition() - 1;
             if (pos < 0 || pos >= roles.size()) {
@@ -2533,7 +2541,19 @@ public class MainActivity extends Activity {
         });
 
         Button remove = secondaryButton("Remove Role Access");
-        holder.addView(remove, buttonParams());
+        remove.setTextSize(12);
+        LinearLayout.LayoutParams removeRoleParams =
+                new LinearLayout.LayoutParams(0, dp(40), 1f);
+        removeRoleParams.leftMargin = dp(5);
+        roleAccessButtons.addView(remove, removeRoleParams);
+
+        LinearLayout.LayoutParams roleAccessRowParams =
+                new LinearLayout.LayoutParams(
+                        ViewGroup.LayoutParams.MATCH_PARENT,
+                        ViewGroup.LayoutParams.WRAP_CONTENT);
+        roleAccessRowParams.topMargin = dp(6);
+        holder.addView(roleAccessButtons, roleAccessRowParams);
+
         remove.setOnClickListener(v -> {
             int pos = roleSpinner.getSelectedItemPosition() - 1;
             if (pos < 0 || pos >= roles.size()) {
@@ -2616,10 +2636,23 @@ public class MainActivity extends Activity {
         }
 
         LinearLayout actions = card();
+        actions.setOrientation(LinearLayout.HORIZONTAL);
+        actions.setPadding(dp(12), dp(10), dp(12), dp(10));
+
         Button create = primaryButton("Create Backup");
+        create.setTextSize(12);
+        LinearLayout.LayoutParams createParams =
+                new LinearLayout.LayoutParams(0, dp(40), 1f);
+        createParams.rightMargin = dp(5);
+        actions.addView(create, createParams);
+
         Button refresh = secondaryButton("Refresh Backups");
-        actions.addView(create, buttonParams());
-        actions.addView(refresh, buttonParams());
+        refresh.setTextSize(12);
+        LinearLayout.LayoutParams refreshParams =
+                new LinearLayout.LayoutParams(0, dp(40), 1f);
+        refreshParams.leftMargin = dp(5);
+        actions.addView(refresh, refreshParams);
+
         c.addView(actions, cardParams());
 
         LinearLayout holder = card();
@@ -2788,12 +2821,40 @@ public class MainActivity extends Activity {
             Spinner scope = darkSpinner(list(
                     "Choose scope", "Overall", "PvP", "Head Pool Easy",
                     "Head Pool Normal", "Head Pool Hard"));
-            addField(stats, "Scope", scope);
 
             Spinner stat = darkSpinner(list(
                     "Choose stat", "Wins", "Losses", "Draws", "Games",
                     "Cancelled", "Unknown results"));
-            addField(stats, "Stat", stat);
+
+            LinearLayout scopeStatRow = new LinearLayout(this);
+            scopeStatRow.setOrientation(LinearLayout.HORIZONTAL);
+            scopeStatRow.setGravity(Gravity.TOP);
+
+            LinearLayout scopeCol = new LinearLayout(this);
+            scopeCol.setOrientation(LinearLayout.VERTICAL);
+            addField(scopeCol, "Scope", scope);
+
+            LinearLayout statCol = new LinearLayout(this);
+            statCol.setOrientation(LinearLayout.VERTICAL);
+            addField(statCol, "Stat", stat);
+
+            LinearLayout.LayoutParams scopeParams =
+                    new LinearLayout.LayoutParams(
+                            0,
+                            ViewGroup.LayoutParams.WRAP_CONTENT,
+                            1f);
+            scopeParams.rightMargin = dp(5);
+            scopeStatRow.addView(scopeCol, scopeParams);
+
+            LinearLayout.LayoutParams statParams =
+                    new LinearLayout.LayoutParams(
+                            0,
+                            ViewGroup.LayoutParams.WRAP_CONTENT,
+                            1f);
+            statParams.leftMargin = dp(5);
+            scopeStatRow.addView(statCol, statParams);
+
+            stats.addView(scopeStatRow);
 
             EditText value = edit("Final displayed value", false);
             value.setInputType(InputType.TYPE_CLASS_NUMBER);
@@ -4119,40 +4180,157 @@ public class MainActivity extends Activity {
         List<JSONObject> roles = jsonList(guildData.optJSONArray("roles"));
 
         LinearLayout form = card();
+        form.setPadding(dp(12), dp(10), dp(12), dp(10));
+
         Spinner channel = spinnerForObjects(channels, "name");
         String configured = guildData.optString("announcement_channel_id", "");
         setObjectSpinnerById(channel, channels, configured);
-        addField(form, "Channel", channel);
 
         EditText title = edit("Announcement title", false);
-        addField(form, "Title", title);
+
+        LinearLayout announceTopRow = new LinearLayout(this);
+        announceTopRow.setOrientation(LinearLayout.HORIZONTAL);
+        announceTopRow.setGravity(Gravity.TOP);
+
+        LinearLayout channelCol = new LinearLayout(this);
+        channelCol.setOrientation(LinearLayout.VERTICAL);
+        addField(channelCol, "Channel", channel);
+
+        LinearLayout titleCol = new LinearLayout(this);
+        titleCol.setOrientation(LinearLayout.VERTICAL);
+        addField(titleCol, "Title", title);
+
+        LinearLayout.LayoutParams channelColParams =
+                new LinearLayout.LayoutParams(
+                        0,
+                        ViewGroup.LayoutParams.WRAP_CONTENT,
+                        1f);
+        channelColParams.rightMargin = dp(5);
+        announceTopRow.addView(channelCol, channelColParams);
+
+        LinearLayout.LayoutParams titleColParams =
+                new LinearLayout.LayoutParams(
+                        0,
+                        ViewGroup.LayoutParams.WRAP_CONTENT,
+                        1f);
+        titleColParams.leftMargin = dp(5);
+        announceTopRow.addView(titleCol, titleColParams);
+
+        form.addView(announceTopRow);
 
         EditText body = edit("Announcement message (Markdown)", true);
-        body.setMinLines(7);
+        body.setMinLines(5);
         addField(form, "Message", body);
 
         Spinner mention = darkSpinner(list("none", "everyone", "here", "role"));
-        addField(form, "Mention", mention);
-
         Spinner role = spinnerForObjects(roles, "name");
-        addField(form, "Role (when mention = role)", role);
+
+        LinearLayout mentionRow = new LinearLayout(this);
+        mentionRow.setOrientation(LinearLayout.HORIZONTAL);
+        mentionRow.setGravity(Gravity.TOP);
+
+        LinearLayout mentionCol = new LinearLayout(this);
+        mentionCol.setOrientation(LinearLayout.VERTICAL);
+        addField(mentionCol, "Mention", mention);
+
+        LinearLayout roleCol = new LinearLayout(this);
+        roleCol.setOrientation(LinearLayout.VERTICAL);
+        addField(roleCol, "Role", role);
+
+        LinearLayout.LayoutParams mentionParams =
+                new LinearLayout.LayoutParams(
+                        0,
+                        ViewGroup.LayoutParams.WRAP_CONTENT,
+                        1f);
+        mentionParams.rightMargin = dp(5);
+        mentionRow.addView(mentionCol, mentionParams);
+
+        LinearLayout.LayoutParams roleParams =
+                new LinearLayout.LayoutParams(
+                        0,
+                        ViewGroup.LayoutParams.WRAP_CONTENT,
+                        1f);
+        roleParams.leftMargin = dp(5);
+        mentionRow.addView(roleCol, roleParams);
+
+        form.addView(mentionRow);
 
         EditText color = edit("#4F46C8", false);
         color.setText("#4F46C8");
-        addField(form, "Embed color", color);
+        EditText footer = edit("Footer (optional)", false);
+
+        LinearLayout colorFooterRow = new LinearLayout(this);
+        colorFooterRow.setOrientation(LinearLayout.HORIZONTAL);
+        colorFooterRow.setGravity(Gravity.TOP);
+
+        LinearLayout colorCol = new LinearLayout(this);
+        colorCol.setOrientation(LinearLayout.VERTICAL);
+        addField(colorCol, "Embed color", color);
+
+        LinearLayout footerCol = new LinearLayout(this);
+        footerCol.setOrientation(LinearLayout.VERTICAL);
+        addField(footerCol, "Footer", footer);
+
+        LinearLayout.LayoutParams colorParams =
+                new LinearLayout.LayoutParams(
+                        0,
+                        ViewGroup.LayoutParams.WRAP_CONTENT,
+                        1f);
+        colorParams.rightMargin = dp(5);
+        colorFooterRow.addView(colorCol, colorParams);
+
+        LinearLayout.LayoutParams footerParams =
+                new LinearLayout.LayoutParams(
+                        0,
+                        ViewGroup.LayoutParams.WRAP_CONTENT,
+                        1f);
+        footerParams.leftMargin = dp(5);
+        colorFooterRow.addView(footerCol, footerParams);
+
+        form.addView(colorFooterRow);
 
         EditText image = edit("https://…", false);
-        addField(form, "Image URL (optional)", image);
-
         EditText thumb = edit("https://…", false);
-        addField(form, "Thumbnail URL (optional)", thumb);
 
-        EditText footer = edit("Footer (optional)", false);
-        addField(form, "Footer", footer);
+        LinearLayout imageRow = new LinearLayout(this);
+        imageRow.setOrientation(LinearLayout.HORIZONTAL);
+        imageRow.setGravity(Gravity.TOP);
+
+        LinearLayout imageCol = new LinearLayout(this);
+        imageCol.setOrientation(LinearLayout.VERTICAL);
+        addField(imageCol, "Image URL", image);
+
+        LinearLayout thumbCol = new LinearLayout(this);
+        thumbCol.setOrientation(LinearLayout.VERTICAL);
+        addField(thumbCol, "Thumbnail URL", thumb);
+
+        LinearLayout.LayoutParams imageParams =
+                new LinearLayout.LayoutParams(
+                        0,
+                        ViewGroup.LayoutParams.WRAP_CONTENT,
+                        1f);
+        imageParams.rightMargin = dp(5);
+        imageRow.addView(imageCol, imageParams);
+
+        LinearLayout.LayoutParams thumbParams =
+                new LinearLayout.LayoutParams(
+                        0,
+                        ViewGroup.LayoutParams.WRAP_CONTENT,
+                        1f);
+        thumbParams.leftMargin = dp(5);
+        imageRow.addView(thumbCol, thumbParams);
+
+        form.addView(imageRow);
 
         if (hasPerm("announcements")) {
             Button postNow = primaryButton("Post Announcement Now");
-            form.addView(postNow, buttonParams());
+            postNow.setTextSize(12);
+            LinearLayout.LayoutParams postNowParams =
+                    new LinearLayout.LayoutParams(
+                            ViewGroup.LayoutParams.MATCH_PARENT,
+                            dp(40));
+            postNowParams.topMargin = dp(6);
+            form.addView(postNow, postNowParams);
             postNow.setOnClickListener(v -> {
                 JSONObject payload = buildAnnouncementPayload(
                         channels, roles, channel, title, body, mention, role,
@@ -4166,15 +4344,34 @@ public class MainActivity extends Activity {
         }
 
         if (hasPerm("scheduled_announcements")) {
-            form.addView(spacer(14));
+            form.addView(spacer(8));
             form.addView(sectionTitle("🗓 Schedule this announcement"));
 
+            LinearLayout scheduleRow = new LinearLayout(this);
+            scheduleRow.setOrientation(LinearLayout.HORIZONTAL);
+
             Button when = secondaryButton("Choose Date & Time");
-            form.addView(when, buttonParams());
+            when.setTextSize(11);
+            LinearLayout.LayoutParams whenParams =
+                    new LinearLayout.LayoutParams(0, dp(40), 1f);
+            whenParams.rightMargin = dp(5);
+            scheduleRow.addView(when, whenParams);
             when.setOnClickListener(v -> chooseScheduleTime(when));
 
-            Button schedule = primaryButton("Schedule Announcement");
-            form.addView(schedule, buttonParams());
+            Button schedule = primaryButton("Schedule");
+            schedule.setTextSize(12);
+            LinearLayout.LayoutParams scheduleParams =
+                    new LinearLayout.LayoutParams(0, dp(40), 1f);
+            scheduleParams.leftMargin = dp(5);
+            scheduleRow.addView(schedule, scheduleParams);
+
+            LinearLayout.LayoutParams scheduleRowParams =
+                    new LinearLayout.LayoutParams(
+                            ViewGroup.LayoutParams.MATCH_PARENT,
+                            ViewGroup.LayoutParams.WRAP_CONTENT);
+            scheduleRowParams.topMargin = dp(5);
+            form.addView(scheduleRow, scheduleRowParams);
+
             schedule.setOnClickListener(v -> {
                 if (scheduleAtMillis <= System.currentTimeMillis() + 20000) {
                     toast("Choose a time at least 20 seconds in the future.");
