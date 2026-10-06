@@ -591,9 +591,18 @@ def merge_secret_portal_achievements(existing, recorded):
                 "secret": True,
                 "unlocked": True,
             }
-            item.update(row)
+            unlocked_at = row.get("unlocked_at")
+            if unlocked_at is not None:
+                if hasattr(unlocked_at, "isoformat"):
+                    unlocked_at = unlocked_at.isoformat()
+                else:
+                    unlocked_at = str(unlocked_at)
+                item["unlocked_at"] = unlocked_at
+
             # Keep the public-facing catalog value even when a grandfathered
-            # ledger row correctly has reward_tokens=0.
+            # ledger row correctly has reward_tokens=0. Never copy raw DB
+            # values into the portal payload because datetime objects are not
+            # JSON serializable.
             item["horse_token_value"] = int(definition["reward"])
             result.append(item)
         else:
