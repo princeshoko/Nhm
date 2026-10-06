@@ -524,34 +524,89 @@ public class MainActivity extends Activity {
     private void checkAdminButtonAccess() {
         io.execute(() -> {
             boolean allowed = false;
-            JSONObject access = null;
+            JSONObject filteredAccess = null;
+            JSONObject firstGuildData = null;
+            String firstGuildId = "";
+
             try {
-                access = api.api("mod_guilds");
+                JSONObject access = api.api("mod_guilds");
                 JSONArray guilds = access.optJSONArray("guilds");
-                allowed = guilds != null && guilds.length() > 0;
+                JSONArray allowedGuilds = new JSONArray();
+
+                if (guilds != null) {
+                    for (int i = 0; i < guilds.length(); i++) {
+                        JSONObject listed = guilds.optJSONObject(i);
+                        if (listed == null) continue;
+
+                        String guildId = listed.optString("id", "");
+                        if (guildId.isEmpty()) continue;
+
+                        try {
+                            JSONObject guild = api.api("mod_guild", "GET", null,
+                                    "&guild_id=" + URLEncoder.encode(guildId, "UTF-8"));
+
+                            if (!hasUsableAdminAccess(guild)) continue;
+
+                            allowedGuilds.put(listed);
+                            if (firstGuildData == null) {
+                                firstGuildData = guild;
+                                firstGuildId = guildId;
+                            }
+                        } catch (Exception ignored) {
+                            // A guild that no longer returns usable moderator data
+                            // must not keep the Admin button visible.
+                        }
+                    }
+                }
+
+                filteredAccess = new JSONObject(access.toString());
+                filteredAccess.put("guilds", allowedGuilds);
+                allowed = allowedGuilds.length() > 0;
             } catch (Exception ignored) {
                 allowed = false;
             }
 
             final boolean finalAllowed = allowed;
-            final JSONObject finalAccess = access;
+            final JSONObject finalAccess = filteredAccess;
+            final JSONObject finalGuildData = firstGuildData;
+            final String finalGuildId = firstGuildId;
+
             main.post(() -> {
                 adminButtonAllowed = finalAllowed;
-                if (finalAllowed && finalAccess != null) {
+
+                if (finalAllowed && finalAccess != null && finalGuildData != null) {
                     adminAccess = finalAccess;
+                    guildData = finalGuildData;
+                    currentGuildId = finalGuildId;
                 } else {
                     adminAccess = null;
                     guildData = null;
                     currentGuildId = "";
+
                     if ("admin".equals(currentTop)) {
                         currentTop = "my";
                         if (titleText != null) titleText.setText("My Sharla");
                         loadMySharla();
                     }
                 }
+
                 updateBottomNav();
             });
         });
+    }
+
+    private boolean hasUsableAdminAccess(JSONObject guild) {
+        if (guild == null) return false;
+        if (guild.optBoolean("full_admin", false)) return true;
+
+        JSONArray permissions = guild.optJSONArray("permissions");
+        if (permissions == null || permissions.length() == 0) return false;
+
+        for (int i = 0; i < permissions.length(); i++) {
+            String permission = permissions.optString(i, "").trim();
+            if (!permission.isEmpty()) return true;
+        }
+        return false;
     }
 
     private void updateBottomNav() {
@@ -946,7 +1001,15 @@ public class MainActivity extends Activity {
     }
 
     private void loadAdmin() {
-        if (adminAccess != null && guildData != null) {
+        if (!adminButtonAllowed) {
+            currentTop = "my";
+            if (titleText != null) titleText.setText("My Sharla");
+            updateBottomNav();
+            loadMySharla();
+            return;
+        }
+
+        if (adminAccess != null && guildData != null && hasUsableAdminAccess(guildData)) {
             renderAdmin();
             return;
         }
@@ -1064,6 +1127,20 @@ public class MainActivity extends Activity {
                 JSONObject g = api.api("mod_guild", "GET", null,
                         "&guild_id=" + URLEncoder.encode(id, "UTF-8"));
                 main.post(() -> {
+                    if (!hasUsableAdminAccess(g)) {
+                        adminButtonAllowed = false;
+                        adminAccess = null;
+                        guildData = null;
+                        currentGuildId = "";
+                        currentTop = "my";
+                        if (titleText != null) titleText.setText("My Sharla");
+                        showBusy(false);
+                        updateBottomNav();
+                        loadMySharla();
+                        toast("Your Admin access has been removed.");
+                        return;
+                    }
+
                     currentGuildId = id;
                     guildData = g;
                     showBusy(false);
