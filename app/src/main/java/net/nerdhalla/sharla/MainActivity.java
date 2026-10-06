@@ -86,6 +86,8 @@ public class MainActivity extends Activity {
     private TextView titleText;
     private TextView myNav;
     private TextView adminNav;
+    private LinearLayout bottomNav;
+    private boolean adminButtonAllowed = false;
     private HorizontalScrollView activeMenuScroller;
     private float swipeDownX;
     private float swipeDownY;
@@ -420,7 +422,9 @@ public class MainActivity extends Activity {
         root.addView(nativeRoot, match());
 
         currentTop = "my";
+        adminButtonAllowed = false;
         updateBottomNav();
+        checkAdminButtonAccess();
         loadMySharla();
     }
 
@@ -456,6 +460,7 @@ public class MainActivity extends Activity {
             } else {
                 adminAccess = null;
                 guildData = null;
+                checkAdminButtonAccess();
                 loadAdmin();
             }
         });
@@ -476,20 +481,25 @@ public class MainActivity extends Activity {
     }
 
     private View buildBottomNav() {
-        LinearLayout nav = new LinearLayout(this);
-        nav.setOrientation(LinearLayout.HORIZONTAL);
-        nav.setGravity(Gravity.CENTER);
-        nav.setPadding(dp(8), dp(7), dp(8), dp(7));
-        nav.setBackgroundColor(BG2);
+        bottomNav = new LinearLayout(this);
+        bottomNav.setOrientation(LinearLayout.HORIZONTAL);
+        bottomNav.setGravity(Gravity.CENTER);
+        bottomNav.setPadding(dp(8), dp(7), dp(8), dp(7));
+        bottomNav.setBackgroundColor(BG2);
 
         myNav = bottomItem("●\nMy Sharla");
         adminNav = bottomItem("◆\nAdmin");
+        adminNav.setVisibility(View.GONE);
 
         LinearLayout.LayoutParams p = new LinearLayout.LayoutParams(0,
                 ViewGroup.LayoutParams.MATCH_PARENT, 1f);
         p.setMargins(dp(4), 0, dp(4), 0);
-        nav.addView(myNav, p);
-        nav.addView(adminNav, p);
+        bottomNav.addView(myNav, p);
+
+        LinearLayout.LayoutParams adminParams = new LinearLayout.LayoutParams(0,
+                ViewGroup.LayoutParams.MATCH_PARENT, 1f);
+        adminParams.setMargins(dp(4), 0, dp(4), 0);
+        bottomNav.addView(adminNav, adminParams);
 
         myNav.setOnClickListener(v -> {
             pendingMenuTransitionDirection = 0;
@@ -500,6 +510,7 @@ public class MainActivity extends Activity {
         });
 
         adminNav.setOnClickListener(v -> {
+            if (!adminButtonAllowed) return;
             pendingMenuTransitionDirection = 0;
             currentTop = "admin";
             titleText.setText("Sharla Admin");
@@ -507,14 +518,55 @@ public class MainActivity extends Activity {
             loadAdmin();
         });
 
-        return nav;
+        return bottomNav;
+    }
+
+    private void checkAdminButtonAccess() {
+        io.execute(() -> {
+            boolean allowed = false;
+            JSONObject access = null;
+            try {
+                access = api.api("mod_guilds");
+                JSONArray guilds = access.optJSONArray("guilds");
+                allowed = guilds != null && guilds.length() > 0;
+            } catch (Exception ignored) {
+                allowed = false;
+            }
+
+            final boolean finalAllowed = allowed;
+            final JSONObject finalAccess = access;
+            main.post(() -> {
+                adminButtonAllowed = finalAllowed;
+                if (finalAllowed && finalAccess != null) {
+                    adminAccess = finalAccess;
+                } else {
+                    adminAccess = null;
+                    guildData = null;
+                    currentGuildId = "";
+                    if ("admin".equals(currentTop)) {
+                        currentTop = "my";
+                        if (titleText != null) titleText.setText("My Sharla");
+                        loadMySharla();
+                    }
+                }
+                updateBottomNav();
+            });
+        });
     }
 
     private void updateBottomNav() {
         if (myNav == null) return;
-        boolean my = "my".equals(currentTop);
+
+        if (adminNav != null) {
+            adminNav.setVisibility(adminButtonAllowed ? View.VISIBLE : View.GONE);
+        }
+
+        boolean my = "my".equals(currentTop) || !adminButtonAllowed;
         styleSelected(myNav, my);
-        styleSelected(adminNav, !my);
+
+        if (adminNav != null && adminButtonAllowed) {
+            styleSelected(adminNav, !my);
+        }
     }
 
     private void loadMySharla() {
@@ -2658,6 +2710,8 @@ public class MainActivity extends Activity {
                 titleText = null;
                 myNav = null;
                 adminNav = null;
+                bottomNav = null;
+                adminButtonAllowed = false;
                 nativeRoot = null;
                 showLogin();
                 toast("Logged out of Nerdhalla.");
