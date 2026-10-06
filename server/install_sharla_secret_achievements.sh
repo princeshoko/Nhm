@@ -836,32 +836,10 @@ if 'record_secret_loot(' not in sec:
 s=s[:start]+sec+s[end:]
 
 
-# Count successful web-shop purchases. Put this immediately before the final
-# successful response at function scope so we cannot split an existing try.
-shop_start=s.find('async def portal_shop_purchase(request):')
-if shop_start >= 0:
-    shop_end=s.find('\nasync def ', shop_start+1)
-    if shop_end < 0:
-        shop_end=len(s)
-    sec=s[shop_start:shop_end]
-
-    if 'record_secret_shop_purchase(' not in sec:
-        pos=sec.rfind('    return web.json_response')
-        if pos < 0:
-            raise SystemExit('portal shop success response marker not found')
-        block='''    try:
-        await record_secret_shop_purchase(
-            bot,
-            user_id,
-            None,
-        )
-    except Exception:
-        pass
-
-'''
-        sec=sec[:pos]+block+sec[pos:]
-
-    s=s[:shop_start]+sec+s[shop_end:]
+# Web-shop purchase tracking is intentionally skipped here.
+# The core secret achievement engine and Discord shop tracking are installed
+# first. This avoids modifying the newer portal_shop_purchase function until
+# its exact live layout is inspected separately.
 
 p.write_text(s)
 print('patched portal')
