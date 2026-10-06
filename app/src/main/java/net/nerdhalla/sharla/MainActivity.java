@@ -2008,8 +2008,12 @@ public class MainActivity extends Activity {
                     && target > 0
                     && current > 0;
 
-            // Keep untouched locked achievements hidden, as before.
-            if (!unlocked && !started) continue;
+            boolean secret = achievement.optBoolean("secret", false);
+
+            // Normal untouched locked achievements stay hidden. Secret
+            // achievements are different: all ten slots remain visible, but
+            // their identifying details stay "???" until discovery.
+            if (!unlocked && !started && !secret) continue;
 
             if ("found".equals(filter) && !unlocked) continue;
             if ("missing".equals(filter) && unlocked) continue;
@@ -2020,8 +2024,8 @@ public class MainActivity extends Activity {
         if (raritySort) {
             items.sort((left, right) -> {
                 int byRarity = Integer.compare(
-                        achievementRarityRank(right.optString("key", "")),
-                        achievementRarityRank(left.optString("key", "")));
+                        achievementRarityRank(right),
+                        achievementRarityRank(left));
 
                 if (byRarity != 0) return byRarity;
 
@@ -2088,6 +2092,25 @@ public class MainActivity extends Activity {
             String emoji = achievement.optString("emoji", "");
             if (emoji.isEmpty()) emoji = achievementEmoji(key);
 
+            boolean secret = achievement.optBoolean("secret", false);
+            String rarityLabel = achievement.optString("rarity", "");
+
+            boolean hasHorseTokenValue = false;
+            int horseTokenValue = 0;
+            if (achievement.has("horse_token_value")
+                    && !achievement.isNull("horse_token_value")) {
+                horseTokenValue = achievement.optInt("horse_token_value", 0);
+                hasHorseTokenValue = true;
+            } else if (achievement.has("reward_tokens")
+                    && !achievement.isNull("reward_tokens")) {
+                horseTokenValue = achievement.optInt("reward_tokens", 0);
+                hasHorseTokenValue = true;
+            } else if (achievement.has("reward")
+                    && !achievement.isNull("reward")) {
+                horseTokenValue = achievement.optInt("reward", 0);
+                hasHorseTokenValue = true;
+            }
+
             LinearLayout itemCard = card();
             itemCard.setPadding(dp(12), dp(8), dp(12), dp(8));
 
@@ -2138,6 +2161,20 @@ public class MainActivity extends Activity {
                                     ViewGroup.LayoutParams.WRAP_CONTENT));
                 }
 
+                if (hasHorseTokenValue) {
+                    TextView reward = text(
+                            horseTokenValue + " Horse Token Value",
+                            9,
+                            GOLD,
+                            true);
+                    reward.setGravity(Gravity.CENTER_HORIZONTAL);
+                    earnedStatus.addView(
+                            reward,
+                            new LinearLayout.LayoutParams(
+                                    ViewGroup.LayoutParams.WRAP_CONTENT,
+                                    ViewGroup.LayoutParams.WRAP_CONTENT));
+                }
+
                 LinearLayout.LayoutParams earnedParams =
                         new LinearLayout.LayoutParams(
                                 ViewGroup.LayoutParams.WRAP_CONTENT,
@@ -2183,6 +2220,27 @@ public class MainActivity extends Activity {
                 itemCard.addView(description);
             }
 
+            if (secret) {
+                String secretMeta;
+                if (!unlocked) {
+                    secretMeta = "Rarity: ???  •  ??? Horse Token Value";
+                } else {
+                    secretMeta = rarityLabel.isEmpty()
+                            ? ""
+                            : "Rarity: " + rarityLabel;
+                }
+
+                if (!secretMeta.isEmpty()) {
+                    TextView meta = text(
+                            secretMeta,
+                            11,
+                            unlocked ? rarityColor(rarityLabel) : MUTED,
+                            unlocked);
+                    meta.setPadding(0, dp(4), 0, 0);
+                    itemCard.addView(meta);
+                }
+            }
+
             LinearLayout.LayoutParams compact = cardParams();
             compact.topMargin = dp(2);
             compact.bottomMargin = dp(2);
@@ -2190,10 +2248,25 @@ public class MainActivity extends Activity {
         }
     }
 
-    private int achievementRarityRank(String key) {
-        switch (key) {
-            case "complete_mythic": return 5;
-            case "complete_legendary": return 4;
+    private int achievementRarityRank(JSONObject achievement) {
+        if (achievement == null) return 0;
+
+        String rarity = achievement.optString("rarity", "");
+        switch (rarity) {
+            case "Mythic": return 6;
+            case "Legendary": return 5;
+            case "Epic": return 4;
+            case "Rare": return 3;
+            case "Uncommon": return 2;
+            case "Common": return 1;
+            default: break;
+        }
+
+        // Original collection-completion achievements predate a rarity field,
+        // so keep their existing key-based ordering as a fallback.
+        switch (achievement.optString("key", "")) {
+            case "complete_mythic": return 6;
+            case "complete_legendary": return 5;
             case "complete_rare": return 3;
             case "complete_uncommon": return 2;
             case "complete_common": return 1;
@@ -2349,7 +2422,37 @@ public class MainActivity extends Activity {
                 "Hold 1,000 Horse Tokens at once.",
                 Math.min(tokens, 1000L), 1000);
 
+        appendPortalSecretAchievements(out, ledger);
         return out;
+    }
+
+    private void appendPortalSecretAchievements(JSONArray out, JSONArray ledger) {
+        if (ledger == null) return;
+
+        Set<String> existingKeys = new HashSet<>();
+        for (int i = 0; i < out.length(); i++) {
+            JSONObject item = out.optJSONObject(i);
+            if (item == null) continue;
+            String key = item.optString("key", "");
+            if (!key.isEmpty()) existingKeys.add(key);
+        }
+
+        for (int i = 0; i < ledger.length(); i++) {
+            JSONObject item = ledger.optJSONObject(i);
+            if (item == null) continue;
+
+            String key = item.optString("key", "");
+            boolean secret = item.optBoolean("secret", false)
+                    || key.startsWith("secret_");
+            if (!secret || existingKeys.contains(key)) continue;
+
+            try {
+                JSONObject copy = new JSONObject(item.toString());
+                copy.put("secret", true);
+                out.put(copy);
+                if (!key.isEmpty()) existingKeys.add(key);
+            } catch (Exception ignored) {}
+        }
     }
 
     private boolean isShopExclusive(String rarity, String name, JSONObject shop) {
