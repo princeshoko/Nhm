@@ -1635,139 +1635,82 @@ public class MainActivity extends Activity {
         LinearLayout c = scrollColumn();
         c.addView(pageHeading(
                 "Achievements",
-                "Unlocked achievements and live progress from your Sharla collection."));
+                "Unlocked achievements and progress you have already started."));
 
-        JSONArray source = buildLiveAchievementList();
-        if (source.length() == 0) {
+        JSONArray arr = buildLiveAchievementList();
+        if (arr.length() == 0) {
             c.addView(infoCard(
                     "Achievements",
-                    "No achievement data is available yet."));
+                    "No unlocked or in-progress achievements yet."));
             return wrapScroll(c);
         }
 
-        final String[] foundFilter = {"all"};
-        final String[] sortMode = {"owned"};
+        LinearLayout controls = new LinearLayout(this);
+        controls.setOrientation(LinearLayout.HORIZONTAL);
+        controls.setGravity(Gravity.CENTER_VERTICAL);
+        controls.setPadding(dp(4), dp(2), dp(4), dp(6));
 
-        LinearLayout controls = card();
-        controls.setPadding(dp(10), dp(8), dp(10), dp(8));
+        final String[] filter = {"all"};
+        final boolean[] raritySort = {false};
 
-        LinearLayout filterRow = new LinearLayout(this);
-        filterRow.setOrientation(LinearLayout.HORIZONTAL);
-        filterRow.setGravity(Gravity.CENTER_VERTICAL);
+        Button allButton = secondaryButton("All");
+        Button foundButton = secondaryButton("Found");
+        Button missingButton = secondaryButton("Not Found");
+        Button rarityButton = secondaryButton("Rarity");
 
-        TextView allChip = achievementFilterChip("All", true);
-        TextView foundChip = achievementFilterChip("Found", false);
-        TextView notFoundChip = achievementFilterChip("Not Found", false);
+        Button[] controlButtons = {
+                allButton,
+                foundButton,
+                missingButton,
+                rarityButton
+        };
 
-        LinearLayout.LayoutParams filterParams =
-                new LinearLayout.LayoutParams(
-                        0,
-                        dp(36),
-                        1f);
-        filterParams.rightMargin = dp(4);
-        filterRow.addView(allChip, filterParams);
+        for (Button button : controlButtons) {
+            button.setTextSize(11);
+            button.setPadding(dp(5), 0, dp(5), 0);
+            LinearLayout.LayoutParams p =
+                    new LinearLayout.LayoutParams(
+                            0,
+                            dp(36),
+                            1f);
+            p.leftMargin = dp(2);
+            p.rightMargin = dp(2);
+            controls.addView(button, p);
+        }
 
-        LinearLayout.LayoutParams foundParams =
-                new LinearLayout.LayoutParams(
-                        0,
-                        dp(36),
-                        1f);
-        foundParams.leftMargin = dp(2);
-        foundParams.rightMargin = dp(2);
-        filterRow.addView(foundChip, foundParams);
+        c.addView(controls);
 
-        LinearLayout.LayoutParams notFoundParams =
-                new LinearLayout.LayoutParams(
-                        0,
-                        dp(36),
-                        1f);
-        notFoundParams.leftMargin = dp(4);
-        filterRow.addView(notFoundChip, notFoundParams);
+        LinearLayout achievementList = new LinearLayout(this);
+        achievementList.setOrientation(LinearLayout.VERTICAL);
+        c.addView(achievementList);
 
-        controls.addView(filterRow);
+        Runnable refresh = () -> renderAchievementItems(
+                achievementList,
+                arr,
+                filter[0],
+                raritySort[0]);
 
-        LinearLayout sortRow = new LinearLayout(this);
-        sortRow.setOrientation(LinearLayout.HORIZONTAL);
-        sortRow.setGravity(Gravity.CENTER_VERTICAL);
-
-        TextView ownedSort = achievementFilterChip("Owned first", true);
-        TextView raritySort = achievementFilterChip("Rarity", false);
-
-        LinearLayout.LayoutParams ownedSortParams =
-                new LinearLayout.LayoutParams(
-                        0,
-                        dp(34),
-                        1f);
-        ownedSortParams.rightMargin = dp(4);
-        sortRow.addView(ownedSort, ownedSortParams);
-
-        LinearLayout.LayoutParams raritySortParams =
-                new LinearLayout.LayoutParams(
-                        0,
-                        dp(34),
-                        1f);
-        raritySortParams.leftMargin = dp(4);
-        sortRow.addView(raritySort, raritySortParams);
-
-        LinearLayout.LayoutParams sortRowParams =
-                new LinearLayout.LayoutParams(
-                        ViewGroup.LayoutParams.MATCH_PARENT,
-                        ViewGroup.LayoutParams.WRAP_CONTENT);
-        sortRowParams.topMargin = dp(6);
-        controls.addView(sortRow, sortRowParams);
-
-        LinearLayout.LayoutParams controlsParams = cardParams();
-        controlsParams.topMargin = dp(2);
-        controlsParams.bottomMargin = dp(5);
-        c.addView(controls, controlsParams);
-
-        LinearLayout list = new LinearLayout(this);
-        list.setOrientation(LinearLayout.VERTICAL);
-        c.addView(list, new LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,
-                ViewGroup.LayoutParams.WRAP_CONTENT));
-
-        Runnable refresh = () -> renderAchievementList(
-                list,
-                source,
-                foundFilter[0],
-                sortMode[0]);
-
-        allChip.setOnClickListener(v -> {
-            foundFilter[0] = "all";
-            styleAchievementFilterChip(allChip, true);
-            styleAchievementFilterChip(foundChip, false);
-            styleAchievementFilterChip(notFoundChip, false);
+        allButton.setOnClickListener(v -> {
+            filter[0] = "all";
+            raritySort[0] = false;
             refresh.run();
         });
 
-        foundChip.setOnClickListener(v -> {
-            foundFilter[0] = "found";
-            styleAchievementFilterChip(allChip, false);
-            styleAchievementFilterChip(foundChip, true);
-            styleAchievementFilterChip(notFoundChip, false);
+        foundButton.setOnClickListener(v -> {
+            filter[0] = "found";
+            raritySort[0] = false;
             refresh.run();
         });
 
-        notFoundChip.setOnClickListener(v -> {
-            foundFilter[0] = "not_found";
-            styleAchievementFilterChip(allChip, false);
-            styleAchievementFilterChip(foundChip, false);
-            styleAchievementFilterChip(notFoundChip, true);
+        missingButton.setOnClickListener(v -> {
+            filter[0] = "missing";
+            raritySort[0] = false;
             refresh.run();
         });
 
-        ownedSort.setOnClickListener(v -> {
-            sortMode[0] = "owned";
-            styleAchievementFilterChip(ownedSort, true);
-            styleAchievementFilterChip(raritySort, false);
-            refresh.run();
-        });
-
-        raritySort.setOnClickListener(v -> {
-            sortMode[0] = "rarity";
-            styleAchievementFilterChip(ownedSort, false);
-            styleAchievementFilterChip(raritySort, true);
+        rarityButton.setOnClickListener(v -> {
+            filter[0] = "all";
+            raritySort[0] = true;
             refresh.run();
         });
 
@@ -1775,84 +1718,79 @@ public class MainActivity extends Activity {
         return wrapScroll(c);
     }
 
-    private TextView achievementFilterChip(String label, boolean selected) {
-        TextView t = text(
-                label,
-                11,
-                selected ? TEXT : MUTED,
-                selected);
-        t.setGravity(Gravity.CENTER);
-        t.setPadding(dp(7), dp(4), dp(7), dp(4));
-        t.setBackground(roundRect(
-                selected ? Color.rgb(55, 38, 78) : PANEL2,
-                12,
-                selected ? PURPLE : LINE,
-                1));
-        return t;
-    }
-
-    private void styleAchievementFilterChip(TextView t, boolean selected) {
-        t.setTextColor(selected ? TEXT : MUTED);
-        t.setTypeface(
-                Typeface.DEFAULT,
-                selected ? Typeface.BOLD : Typeface.NORMAL);
-        t.setBackground(roundRect(
-                selected ? Color.rgb(55, 38, 78) : PANEL2,
-                12,
-                selected ? PURPLE : LINE,
-                1));
-    }
-
-    private void renderAchievementList(
+    private void renderAchievementItems(
             LinearLayout parent,
             JSONArray source,
-            String foundFilter,
-            String sortMode) {
+            String filter,
+            boolean raritySort) {
 
         parent.removeAllViews();
 
         List<JSONObject> items = new ArrayList<>();
-
         for (int i = 0; i < source.length(); i++) {
             JSONObject achievement = source.optJSONObject(i);
             if (achievement == null) continue;
 
             boolean unlocked = achievement.optBoolean("unlocked", false);
+            boolean hasCurrent = achievement.has("current")
+                    && !achievement.isNull("current");
+            boolean hasTarget = achievement.has("target")
+                    && !achievement.isNull("target");
 
-            if ("found".equals(foundFilter) && !unlocked) continue;
-            if ("not_found".equals(foundFilter) && unlocked) continue;
+            double current = hasCurrent
+                    ? achievement.optDouble("current", 0)
+                    : 0;
+            double target = hasTarget
+                    ? achievement.optDouble("target", 0)
+                    : 0;
+
+            boolean started = hasCurrent
+                    && hasTarget
+                    && target > 0
+                    && current > 0;
+
+            // Keep untouched locked achievements hidden, as before.
+            if (!unlocked && !started) continue;
+
+            if ("found".equals(filter) && !unlocked) continue;
+            if ("missing".equals(filter) && unlocked) continue;
 
             items.add(achievement);
         }
 
-        if ("rarity".equals(sortMode)) {
+        if (raritySort) {
             items.sort((left, right) -> {
-                int rarityCompare = Integer.compare(
+                int byRarity = Integer.compare(
                         achievementRarityRank(right.optString("key", "")),
                         achievementRarityRank(left.optString("key", "")));
-                if (rarityCompare != 0) return rarityCompare;
 
-                int foundCompare = Boolean.compare(
-                        right.optBoolean("unlocked", false),
-                        left.optBoolean("unlocked", false));
-                if (foundCompare != 0) return foundCompare;
+                if (byRarity != 0) return byRarity;
+
+                boolean leftUnlocked = left.optBoolean("unlocked", false);
+                boolean rightUnlocked = right.optBoolean("unlocked", false);
+
+                if (leftUnlocked != rightUnlocked) {
+                    return leftUnlocked ? -1 : 1;
+                }
 
                 return left.optString("name", "")
                         .compareToIgnoreCase(right.optString("name", ""));
             });
         } else {
+            // Default: owned/unlocked achievements first.
             items.sort((left, right) -> {
-                int foundCompare = Boolean.compare(
-                        right.optBoolean("unlocked", false),
-                        left.optBoolean("unlocked", false));
-                if (foundCompare != 0) return foundCompare;
+                boolean leftUnlocked = left.optBoolean("unlocked", false);
+                boolean rightUnlocked = right.optBoolean("unlocked", false);
+
+                if (leftUnlocked != rightUnlocked) {
+                    return leftUnlocked ? -1 : 1;
+                }
 
                 double leftPercent = left.optDouble("percent", 0);
                 double rightPercent = right.optDouble("percent", 0);
-                int progressCompare = Double.compare(
-                        rightPercent,
-                        leftPercent);
-                if (progressCompare != 0) return progressCompare;
+
+                int byProgress = Double.compare(rightPercent, leftPercent);
+                if (byProgress != 0) return byProgress;
 
                 return left.optString("name", "")
                         .compareToIgnoreCase(right.optString("name", ""));
@@ -1862,25 +1800,34 @@ public class MainActivity extends Activity {
         if (items.isEmpty()) {
             parent.addView(infoCard(
                     "Achievements",
-                    "No achievements match this filter."));
+                    "No achievements match this view."));
             return;
         }
 
         for (JSONObject achievement : items) {
             boolean unlocked = achievement.optBoolean("unlocked", false);
 
+            boolean hasCurrent = achievement.has("current")
+                    && !achievement.isNull("current");
+            boolean hasTarget = achievement.has("target")
+                    && !achievement.isNull("target");
+
+            double current = hasCurrent
+                    ? achievement.optDouble("current", 0)
+                    : 0;
+            double target = hasTarget
+                    ? achievement.optDouble("target", 0)
+                    : 0;
+
             String key = achievement.optString("key", "");
             String name = achievement.optString("name", "");
+
             if (name.isEmpty() || name.equals(key)) {
                 name = achievementDisplayName(key);
             }
 
             String emoji = achievement.optString("emoji", "");
             if (emoji.isEmpty()) emoji = achievementEmoji(key);
-
-            double current = achievement.optDouble("current", 0);
-            double target = achievement.optDouble("target", 0);
-            double percent = achievement.optDouble("percent", 0);
 
             LinearLayout itemCard = card();
             itemCard.setPadding(dp(12), dp(8), dp(12), dp(8));
@@ -1894,6 +1841,7 @@ public class MainActivity extends Activity {
                     15,
                     unlocked ? GOLD : TEXT,
                     true);
+
             top.addView(
                     title,
                     new LinearLayout.LayoutParams(
@@ -1904,15 +1852,29 @@ public class MainActivity extends Activity {
             if (unlocked) {
                 TextView done = text("✓", 15, GREEN, true);
                 done.setGravity(Gravity.CENTER);
-                top.addView(done, new LinearLayout.LayoutParams(dp(28), dp(28)));
+                top.addView(
+                        done,
+                        new LinearLayout.LayoutParams(
+                                dp(28),
+                                dp(28)));
             }
 
             itemCard.addView(top);
 
-            if (target > 0) {
-                String progressText = formatAchievementNumber(current)
-                        + " / " + formatAchievementNumber(target)
-                        + "  •  " + trim1(percent) + "%";
+            if (hasCurrent && hasTarget && target > 0) {
+                double percent = achievement.has("percent")
+                        ? achievement.optDouble("percent", 0)
+                        : Math.min(
+                                100.0,
+                                (current / target) * 100.0);
+
+                String progressText =
+                        formatAchievementNumber(current)
+                                + " / "
+                                + formatAchievementNumber(target)
+                                + "  •  "
+                                + trim1(percent)
+                                + "%";
 
                 TextView progress = text(
                         progressText,
@@ -1925,7 +1887,11 @@ public class MainActivity extends Activity {
 
             String desc = achievement.optString("description", "");
             if (!desc.isEmpty()) {
-                TextView description = text(desc, 12, MUTED, false);
+                TextView description = text(
+                        desc,
+                        12,
+                        MUTED,
+                        false);
                 description.setPadding(0, dp(3), 0, 0);
                 itemCard.addView(description);
             }
