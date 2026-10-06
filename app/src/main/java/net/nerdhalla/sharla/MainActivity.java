@@ -1894,11 +1894,21 @@ public class MainActivity extends Activity {
 
     private View renderAchievementsPage() {
         LinearLayout c = scrollColumn();
-        c.addView(pageHeading(
-                "Achievements",
-                "Unlocked achievements and progress you have already started."));
 
         JSONArray arr = buildLiveAchievementList();
+        int foundAchievements = 0;
+        for (int i = 0; i < arr.length(); i++) {
+            JSONObject item = arr.optJSONObject(i);
+            if (item != null && item.optBoolean("unlocked", false)) {
+                foundAchievements++;
+            }
+        }
+
+        c.addView(pageHeading(
+                "Achievements",
+                "Found " + foundAchievements + " / " + arr.length() +
+                        " achievements • Secret achievements remain ??? until discovered."));
+
         if (arr.length() == 0) {
             c.addView(infoCard(
                     "Achievements",
