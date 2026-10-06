@@ -738,6 +738,73 @@ public class MainActivity extends Activity {
         profile.addView(statLine("Messages", fmt(p.optLong("count", 0))));
         profile.addView(statLine("Horse Tokens", fmt(p.optLong("horse_tokens", 0)) + " 🪙"));
 
+        JSONObject loot = meData.optJSONObject("loot");
+
+        LinearLayout lootRow = new LinearLayout(this);
+        lootRow.setOrientation(LinearLayout.HORIZONTAL);
+        lootRow.setGravity(Gravity.CENTER_VERTICAL);
+        lootRow.setPadding(dp(10), dp(8), dp(8), dp(8));
+        lootRow.setBackground(roundRect(PANEL2, 12, LINE, 1));
+
+        LinearLayout lootText = new LinearLayout(this);
+        lootText.setOrientation(LinearLayout.VERTICAL);
+
+        TextView lootTitle = text("🎁 Sharla Loot", 14, TEXT, true);
+        TextView lootCountdown = text("", 13, GOLD, false);
+        lootCountdown.setPadding(0, dp(2), 0, 0);
+
+        lootText.addView(lootTitle);
+        lootText.addView(lootCountdown);
+
+        lootRow.addView(
+                lootText,
+                new LinearLayout.LayoutParams(
+                        0,
+                        ViewGroup.LayoutParams.WRAP_CONTENT,
+                        1f));
+
+        Button claimLoot = primaryButton("Claim");
+        LinearLayout.LayoutParams lootButtonParams =
+                new LinearLayout.LayoutParams(dp(88), dp(42));
+        lootButtonParams.leftMargin = dp(10);
+        lootRow.addView(claimLoot, lootButtonParams);
+
+        if (loot == null) {
+            lootCountdown.setText("Status unavailable");
+            lootCountdown.setTextColor(RED);
+            claimLoot.setText("Wait");
+            claimLoot.setEnabled(false);
+        } else {
+            long baseRemaining = Math.max(
+                    0L,
+                    loot.optLong("remaining_seconds", 0L));
+            long ageSeconds = meDataFetchedElapsed > 0L
+                    ? Math.max(
+                            0L,
+                            (SystemClock.elapsedRealtime()
+                                    - meDataFetchedElapsed) / 1000L)
+                    : 0L;
+            long remaining = Math.max(
+                    0L,
+                    baseRemaining - ageSeconds);
+
+            claimLoot.setOnClickListener(
+                    v -> claimLootFromApp(claimLoot));
+
+            startLootCountdown(
+                    lootCountdown,
+                    claimLoot,
+                    remaining);
+        }
+
+        LinearLayout.LayoutParams lootRowParams =
+                new LinearLayout.LayoutParams(
+                        ViewGroup.LayoutParams.MATCH_PARENT,
+                        ViewGroup.LayoutParams.WRAP_CONTENT);
+        lootRowParams.topMargin = dp(12);
+        lootRowParams.bottomMargin = dp(6);
+        profile.addView(lootRow, lootRowParams);
+
         profile.addView(label("Race"));
         Spinner race = darkSpinner(list("Person", "Place", "Thing", "Cat"));
         setSpinnerValue(race, p.optString("race", "Person"));
@@ -764,36 +831,6 @@ public class MainActivity extends Activity {
         });
 
         c.addView(profile, cardParams());
-
-        JSONObject loot = meData.optJSONObject("loot");
-        LinearLayout lootCard = card();
-        lootCard.addView(sectionTitle("🎁 Sharla Loot"));
-        lootCard.addView(text(
-                "Claim one random loot item and +1 Horse Token every 12 hours.",
-                13, MUTED, false));
-
-        TextView lootCountdown = text("", 20, GOLD, true);
-        lootCountdown.setPadding(0, dp(12), 0, dp(4));
-        lootCard.addView(lootCountdown);
-
-        Button claimLoot = primaryButton("Claim Loot");
-        lootCard.addView(claimLoot, buttonParams());
-
-        if (loot == null) {
-            lootCountdown.setText("Loot status unavailable");
-            lootCountdown.setTextColor(RED);
-            claimLoot.setEnabled(false);
-        } else {
-            long baseRemaining = Math.max(0L, loot.optLong("remaining_seconds", 0L));
-            long ageSeconds = meDataFetchedElapsed > 0L
-                    ? Math.max(0L, (SystemClock.elapsedRealtime() - meDataFetchedElapsed) / 1000L)
-                    : 0L;
-            long remaining = Math.max(0L, baseRemaining - ageSeconds);
-            startLootCountdown(lootCountdown, claimLoot, remaining);
-            claimLoot.setOnClickListener(v -> claimLootFromApp(claimLoot));
-        }
-
-        c.addView(lootCard, cardParams());
 
         LinearLayout collection = card();
         collection.addView(sectionTitle("Collection"));
@@ -822,7 +859,7 @@ public class MainActivity extends Activity {
                 if (seconds <= 0L) {
                     countdown.setText("Ready now");
                     countdown.setTextColor(GREEN);
-                    claimButton.setText("Claim Loot");
+                    claimButton.setText("Claim");
                     claimButton.setEnabled(true);
                     return;
                 }
@@ -832,10 +869,10 @@ public class MainActivity extends Activity {
                 long secs = seconds % 60L;
                 countdown.setText(String.format(
                         Locale.US,
-                        "Next loot in %02d:%02d:%02d",
+                        "Next in %02d:%02d:%02d",
                         hours, minutes, secs));
                 countdown.setTextColor(GOLD);
-                claimButton.setText("Loot on cooldown");
+                claimButton.setText("Wait");
                 claimButton.setEnabled(false);
                 main.postDelayed(this, 1000L);
             }
