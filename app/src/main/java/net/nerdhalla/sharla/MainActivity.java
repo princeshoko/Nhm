@@ -1309,16 +1309,94 @@ public class MainActivity extends Activity {
 
     private View renderHomeworldsPage() {
         LinearLayout c = scrollColumn();
-        c.addView(pageHeading("Homeworlds Stats", "Your Head Pool Homeworlds record and recent results."));
+        c.addView(pageHeading(
+                "Homeworlds Stats",
+                "Your Head Pool Homeworlds record, matchmaking queue, and recent results."));
 
         JSONObject h = meData.optJSONObject("homeworlds");
         if (h == null || !h.optBoolean("available", false)) {
-            c.addView(infoCard("Homeworlds", "Head Pool stats are not available right now."));
+            c.addView(infoCard(
+                    "Homeworlds",
+                    "Head Pool stats are not available right now."));
             return wrapScroll(c);
         }
 
+        LinearLayout queueCard = card();
+        queueCard.setPadding(dp(12), dp(10), dp(12), dp(10));
+        queueCard.addView(sectionTitle("🌌 Matchmaking Queue"));
+
+        TextView queueStatus = text(
+                "Join Head Pool's global Homeworlds queue or view who is waiting.",
+                12,
+                MUTED,
+                false);
+        queueCard.addView(queueStatus);
+
+        LinearLayout queueButtons = new LinearLayout(this);
+        queueButtons.setOrientation(LinearLayout.HORIZONTAL);
+
+        Button joinQueue = primaryButton("Join Queue");
+        joinQueue.setTextSize(11);
+        LinearLayout.LayoutParams joinParams =
+                new LinearLayout.LayoutParams(0, dp(40), 1f);
+        joinParams.rightMargin = dp(4);
+        queueButtons.addView(joinQueue, joinParams);
+
+        Button viewQueue = secondaryButton("View Queue");
+        viewQueue.setTextSize(11);
+        LinearLayout.LayoutParams viewParams =
+                new LinearLayout.LayoutParams(0, dp(40), 1f);
+        viewParams.leftMargin = dp(2);
+        viewParams.rightMargin = dp(2);
+        queueButtons.addView(viewQueue, viewParams);
+
+        Button leaveQueue = secondaryButton("Leave Queue");
+        leaveQueue.setTextSize(11);
+        LinearLayout.LayoutParams leaveParams =
+                new LinearLayout.LayoutParams(0, dp(40), 1f);
+        leaveParams.leftMargin = dp(4);
+        queueButtons.addView(leaveQueue, leaveParams);
+
+        LinearLayout.LayoutParams queueButtonRowParams =
+                new LinearLayout.LayoutParams(
+                        ViewGroup.LayoutParams.MATCH_PARENT,
+                        ViewGroup.LayoutParams.WRAP_CONTENT);
+        queueButtonRowParams.topMargin = dp(8);
+        queueCard.addView(queueButtons, queueButtonRowParams);
+
+        joinQueue.setOnClickListener(v ->
+                runHomeworldsQueueAction(
+                        "join",
+                        queueStatus,
+                        joinQueue,
+                        viewQueue,
+                        leaveQueue,
+                        true));
+
+        viewQueue.setOnClickListener(v ->
+                runHomeworldsQueueAction(
+                        "view",
+                        queueStatus,
+                        joinQueue,
+                        viewQueue,
+                        leaveQueue,
+                        true));
+
+        leaveQueue.setOnClickListener(v ->
+                runHomeworldsQueueAction(
+                        "leave",
+                        queueStatus,
+                        joinQueue,
+                        viewQueue,
+                        leaveQueue,
+                        true));
+
+        c.addView(queueCard, cardParams());
+
         LinearLayout card = card();
-        card.addView(bigStat(trim1(h.optDouble("win_rate", 0)) + "%", "overall win rate"));
+        card.addView(bigStat(
+                trim1(h.optDouble("win_rate", 0)) + "%",
+                "overall win rate"));
 
         LinearLayout homeworldStats = new LinearLayout(this);
         homeworldStats.setOrientation(LinearLayout.HORIZONTAL);
@@ -1326,15 +1404,23 @@ public class MainActivity extends Activity {
 
         LinearLayout homeworldLeft = new LinearLayout(this);
         homeworldLeft.setOrientation(LinearLayout.VERTICAL);
-        homeworldLeft.addView(statLine("Archived", String.valueOf(h.optInt("archived", 0))));
+        homeworldLeft.addView(statLine(
+                "Archived",
+                String.valueOf(h.optInt("archived", 0))));
         homeworldLeft.addView(statLine("Overall", record(h)));
         homeworldLeft.addView(statLine("PvP", record(h.optJSONObject("pvp"))));
 
         LinearLayout homeworldRight = new LinearLayout(this);
         homeworldRight.setOrientation(LinearLayout.VERTICAL);
-        homeworldRight.addView(statLine("Head Pool Easy", record(h.optJSONObject("easy"))));
-        homeworldRight.addView(statLine("Head Pool Normal", record(h.optJSONObject("normal"))));
-        homeworldRight.addView(statLine("Head Pool Hard", record(h.optJSONObject("hard"))));
+        homeworldRight.addView(statLine(
+                "Head Pool Easy",
+                record(h.optJSONObject("easy"))));
+        homeworldRight.addView(statLine(
+                "Head Pool Normal",
+                record(h.optJSONObject("normal"))));
+        homeworldRight.addView(statLine(
+                "Head Pool Hard",
+                record(h.optJSONObject("hard"))));
 
         LinearLayout.LayoutParams homeworldLeftParams =
                 new LinearLayout.LayoutParams(
@@ -1368,12 +1454,136 @@ public class MainActivity extends Activity {
             for (int i = 0; i < Math.min(4, recent.length()); i++) {
                 JSONObject x = recent.optJSONObject(i);
                 if (x != null) {
-                    card.addView(text("• " + x.optString("result", "Result") + " vs " + x.optString("opponent", "opponent"), 14, MUTED, false));
+                    card.addView(text(
+                            "• " + x.optString("result", "Result") +
+                                    " vs " +
+                                    x.optString("opponent", "opponent"),
+                            14,
+                            MUTED,
+                            false));
                 }
             }
         }
+
         c.addView(card, cardParams());
+
+        // Load current queue state without popping a dialog on page open.
+        runHomeworldsQueueAction(
+                "view",
+                queueStatus,
+                joinQueue,
+                viewQueue,
+                leaveQueue,
+                false);
+
         return wrapScroll(c);
+    }
+
+    private void runHomeworldsQueueAction(
+            String operation,
+            TextView status,
+            Button join,
+            Button view,
+            Button leave,
+            boolean showQueueDialog) {
+
+        if (join != null) join.setEnabled(false);
+        if (view != null) view.setEnabled(false);
+        if (leave != null) leave.setEnabled(false);
+
+        if (status != null) status.setText("Checking Head Pool queue…");
+
+        JSONObject body = new JSONObject();
+        try {
+            body.put("operation", operation);
+        } catch (Exception ignored) {}
+
+        post("homeworlds_queue", body, result -> {
+            boolean queued = result.optBoolean("queued", false);
+            int position = result.optInt("position", 0);
+            int waiting = result.optInt("waiting", 0);
+            int active = result.optInt("active_matches", 0);
+
+            if (status != null) {
+                if (queued && position > 0) {
+                    status.setText(
+                            "You're waiting at #" + position +
+                                    " of " + waiting +
+                                    " • " + active + " active match" +
+                                    (active == 1 ? "" : "es"));
+                    status.setTextColor(GREEN);
+                } else {
+                    status.setText(
+                            waiting + " waiting • " +
+                                    active + " active match" +
+                                    (active == 1 ? "" : "es"));
+                    status.setTextColor(MUTED);
+                }
+            }
+
+            if (join != null) join.setEnabled(!queued);
+            if (view != null) view.setEnabled(true);
+            if (leave != null) leave.setEnabled(queued);
+
+            String message = result.optString("message", "");
+            if (!message.isEmpty() && !"view".equals(operation)) {
+                toast(message);
+            }
+
+            if (showQueueDialog) {
+                showHomeworldsQueueDialog(result);
+            }
+        });
+    }
+
+    private void showHomeworldsQueueDialog(JSONObject result) {
+        JSONArray queue = result.optJSONArray("queue");
+        int waiting = result.optInt("waiting", 0);
+        int active = result.optInt("active_matches", 0);
+
+        StringBuilder body = new StringBuilder();
+
+        if (queue == null || queue.length() == 0) {
+            body.append("Nobody is waiting right now.");
+        } else {
+            int limit = Math.min(20, queue.length());
+            for (int i = 0; i < limit; i++) {
+                JSONObject entry = queue.optJSONObject(i);
+                if (entry == null) continue;
+
+                int position = entry.optInt("position", i + 1);
+                String name = entry.optString(
+                        "name",
+                        "User " + entry.optString("user_id", ""));
+
+                body.append(position)
+                        .append(". ")
+                        .append(name);
+
+                if (entry.optBoolean("you", false)) {
+                    body.append("  •  You");
+                }
+
+                body.append("\n");
+            }
+
+            if (queue.length() > 20) {
+                body.append("\n…and ")
+                        .append(queue.length() - 20)
+                        .append(" more.");
+            }
+        }
+
+        body.append("\n\nWaiting: ")
+                .append(waiting)
+                .append("\nActive matches: ")
+                .append(active);
+
+        new AlertDialog.Builder(this)
+                .setTitle(rainbowNerdhalla("Homeworlds Global Queue"))
+                .setMessage(rainbowNerdhalla(body.toString()))
+                .setPositiveButton("Close", null)
+                .show();
     }
 
     private View renderInventoryPage() {
