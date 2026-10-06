@@ -18,6 +18,7 @@ import android.os.Bundle;
 import android.os.Handler;
 import android.os.Environment;
 import android.os.Looper;
+import android.os.SystemClock;
 import android.text.InputType;
 import android.text.Spannable;
 import android.text.SpannableString;
@@ -97,6 +98,7 @@ public class MainActivity extends Activity {
 
     private JSONObject session;
     private JSONObject meData;
+    private long meDataFetchedElapsed = 0L;
     private JSONObject adminAccess;
     private JSONObject guildData;
     private String currentGuildId = "";
@@ -353,47 +355,30 @@ public class MainActivity extends Activity {
         LinearLayout shell = new LinearLayout(this);
         shell.setOrientation(LinearLayout.VERTICAL);
         shell.setGravity(Gravity.CENTER);
-        shell.setPadding(dp(26), dp(26), dp(26), dp(26));
+        shell.setPadding(dp(30), dp(30), dp(30), dp(30));
         shell.setBackgroundColor(BG);
 
         ImageView logo = new ImageView(this);
         logo.setImageResource(R.drawable.nerdhalla_icon);
         logo.setScaleType(ImageView.ScaleType.CENTER_CROP);
-        shell.addView(logo, new LinearLayout.LayoutParams(dp(104), dp(104)));
+        shell.addView(logo, new LinearLayout.LayoutParams(dp(128), dp(128)));
 
-        TextView brand = text("NERDHALLA", 25, TEXT, true);
+        TextView brand = text("NERDHALLA", 28, TEXT, true);
         brand.setGravity(Gravity.CENTER);
-        brand.setPadding(0, dp(20), 0, dp(6));
+        brand.setPadding(0, dp(22), 0, dp(24));
         shell.addView(brand);
-
-        TextView heading = text("Sign in to Sharla", 19, TEXT, true);
-        heading.setGravity(Gravity.CENTER);
-        shell.addView(heading);
-
-        TextView note = text(
-                "Discord login opens in your browser. When it is complete, Nerdhalla will reopen automatically and load the native dashboard.",
-                14, MUTED, false);
-        note.setGravity(Gravity.CENTER);
-        note.setPadding(dp(8), dp(10), dp(8), dp(20));
-        shell.addView(note);
 
         Button login = primaryButton("Login with Discord");
         LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, dp(52));
-        lp.setMargins(dp(8), dp(8), dp(8), dp(8));
+                ViewGroup.LayoutParams.MATCH_PARENT, dp(54));
+        lp.setMargins(dp(10), 0, dp(10), 0);
         shell.addView(login, lp);
-
-        TextView status = text("No web page will be shown inside the app.", 12, MUTED, false);
-        status.setGravity(Gravity.CENTER);
-        status.setPadding(0, dp(8), 0, 0);
-        shell.addView(status);
 
         login.setOnClickListener(v -> {
             try {
                 Intent browser = new Intent(Intent.ACTION_VIEW, Uri.parse(MOBILE_LOGIN));
                 browser.addCategory(Intent.CATEGORY_BROWSABLE);
                 startActivity(browser);
-                status.setText("Finish the Discord login in your browser. The app will reopen automatically.");
             } catch (Exception e) {
                 toast("Could not open your browser.");
             }
@@ -642,6 +627,7 @@ public class MainActivity extends Activity {
                 JSONObject d = api.api("me");
                 main.post(() -> {
                     meData = d;
+                    meDataFetchedElapsed = SystemClock.elapsedRealtime();
                     showBusy(false);
                     renderMySharla();
                 });
@@ -775,6 +761,36 @@ public class MainActivity extends Activity {
 
         c.addView(profile, cardParams());
 
+        JSONObject loot = meData.optJSONObject("loot");
+        LinearLayout lootCard = card();
+        lootCard.addView(sectionTitle("🎁 Sharla Loot"));
+        lootCard.addView(text(
+                "Claim one random loot item and +1 Horse Token every 12 hours.",
+                13, MUTED, false));
+
+        TextView lootCountdown = text("", 20, GOLD, true);
+        lootCountdown.setPadding(0, dp(12), 0, dp(4));
+        lootCard.addView(lootCountdown);
+
+        Button claimLoot = primaryButton("Claim Loot");
+        lootCard.addView(claimLoot, buttonParams());
+
+        if (loot == null) {
+            lootCountdown.setText("Loot status unavailable");
+            lootCountdown.setTextColor(RED);
+            claimLoot.setEnabled(false);
+        } else {
+            long baseRemaining = Math.max(0L, loot.optLong("remaining_seconds", 0L));
+            long ageSeconds = meDataFetchedElapsed > 0L
+                    ? Math.max(0L, (SystemClock.elapsedRealtime() - meDataFetchedElapsed) / 1000L)
+                    : 0L;
+            long remaining = Math.max(0L, baseRemaining - ageSeconds);
+            startLootCountdown(lootCountdown, claimLoot, remaining);
+            claimLoot.setOnClickListener(v -> claimLootFromApp(claimLoot));
+        }
+
+        c.addView(lootCard, cardParams());
+
         LinearLayout collection = card();
         collection.addView(sectionTitle("Collection"));
         collection.addView(bigStat(String.valueOf(stats.optInt("unique_items", 0)), "unique items"));
@@ -784,6 +800,72 @@ public class MainActivity extends Activity {
         c.addView(collection, cardParams());
 
         return wrapScroll(c);
+    }
+
+    private void startLootCountdown(
+            TextView countdown, Button claimButton, long remainingSeconds) {
+        final long readyAt = SystemClock.elapsedRealtime() +
+                Math.max(0L, remainingSeconds) * 1000L;
+
+        Runnable ticker = new Runnable() {
+            @Override
+            public void run() {
+                if (!countdown.isAttachedToWindow()) return;
+
+                long millis = Math.max(0L, readyAt - SystemClock.elapsedRealtime());
+                long seconds = (millis + 999L) / 1000L;
+
+                if (seconds <= 0L) {
+                    countdown.setText("Ready now");
+                    countdown.setTextColor(GREEN);
+                    claimButton.setText("Claim Loot");
+                    claimButton.setEnabled(true);
+                    return;
+                }
+
+                long hours = seconds / 3600L;
+                long minutes = (seconds % 3600L) / 60L;
+                long secs = seconds % 60L;
+                countdown.setText(String.format(
+                        Locale.US,
+                        "Next loot in %02d:%02d:%02d",
+                        hours, minutes, secs));
+                countdown.setTextColor(GOLD);
+                claimButton.setText("Loot on cooldown");
+                claimButton.setEnabled(false);
+                main.postDelayed(this, 1000L);
+            }
+        };
+
+        main.post(ticker);
+    }
+
+    private void claimLootFromApp(Button claimButton) {
+        claimButton.setEnabled(false);
+        showBusy(true);
+
+        io.execute(() -> {
+            try {
+                JSONObject result = api.api("loot", "POST", new JSONObject());
+                main.post(() -> {
+                    showBusy(false);
+                    String rarity = result.optString("rarity", "Loot");
+                    String item = result.optString("item", "item");
+                    toast("🎁 " + item + " [" + rarity + "] • +1 Horse Token");
+                    meData = null;
+                    meDataFetchedElapsed = 0L;
+                    loadMySharla();
+                });
+            } catch (Exception e) {
+                main.post(() -> {
+                    showBusy(false);
+                    toast(e.getMessage());
+                    meData = null;
+                    meDataFetchedElapsed = 0L;
+                    loadMySharla();
+                });
+            }
+        });
     }
 
     private View renderHomeworldsPage() {
@@ -2777,6 +2859,7 @@ public class MainActivity extends Activity {
                 api.setCsrfToken("");
                 session = null;
                 meData = null;
+                meDataFetchedElapsed = 0L;
                 adminAccess = null;
                 guildData = null;
                 currentGuildId = "";
