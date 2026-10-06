@@ -10,6 +10,7 @@ import android.net.Uri;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
 import android.graphics.Color;
+import android.graphics.Rect;
 import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
 import android.os.Build;
@@ -18,7 +19,11 @@ import android.os.Handler;
 import android.os.Environment;
 import android.os.Looper;
 import android.text.InputType;
+import android.text.Spannable;
+import android.text.SpannableString;
+import android.text.style.ForegroundColorSpan;
 import android.view.Gravity;
+import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.WindowInsets;
@@ -81,6 +86,10 @@ public class MainActivity extends Activity {
     private TextView titleText;
     private TextView myNav;
     private TextView adminNav;
+    private HorizontalScrollView activeMenuScroller;
+    private float swipeDownX;
+    private float swipeDownY;
+    private boolean swipeTracking;
 
     private JSONObject session;
     private JSONObject meData;
@@ -147,6 +156,85 @@ public class MainActivity extends Activity {
         if (!handleAuthIntent(intent)) {
             checkSession();
         }
+    }
+
+    @Override
+    public boolean dispatchTouchEvent(MotionEvent event) {
+        if (event != null && nativeRoot != null && nativeRoot.getParent() != null) {
+            switch (event.getActionMasked()) {
+                case MotionEvent.ACTION_DOWN:
+                    swipeDownX = event.getRawX();
+                    swipeDownY = event.getRawY();
+                    swipeTracking = !isTouchInsideActiveMenu(event.getRawX(), event.getRawY());
+                    break;
+                case MotionEvent.ACTION_UP:
+                    if (swipeTracking) {
+                        float dx = event.getRawX() - swipeDownX;
+                        float dy = event.getRawY() - swipeDownY;
+                        float absX = Math.abs(dx);
+                        float absY = Math.abs(dy);
+                        if (absX >= dp(70) && absX > absY * 1.35f) {
+                            int direction = dx < 0 ? 1 : -1;
+                            main.post(() -> navigateMenuBySwipe(direction));
+                        }
+                    }
+                    swipeTracking = false;
+                    break;
+                case MotionEvent.ACTION_CANCEL:
+                    swipeTracking = false;
+                    break;
+            }
+        }
+        return super.dispatchTouchEvent(event);
+    }
+
+    private boolean isTouchInsideActiveMenu(float rawX, float rawY) {
+        if (activeMenuScroller == null || !activeMenuScroller.isShown()) return false;
+        Rect rect = new Rect();
+        return activeMenuScroller.getGlobalVisibleRect(rect) &&
+                rect.contains((int) rawX, (int) rawY);
+    }
+
+    private void navigateMenuBySwipe(int direction) {
+        if (direction == 0 || (busy != null && busy.getVisibility() == View.VISIBLE)) return;
+
+        if ("my".equals(currentTop)) {
+            if (meData == null) return;
+            List<String> keys = list("profile", "homeworlds", "inventory", "achievements");
+            int current = keys.indexOf(currentMySection);
+            if (current < 0) current = 0;
+            int next = current + direction;
+            if (next < 0 || next >= keys.size()) return;
+            currentMySection = keys.get(next);
+            renderMySharla();
+            return;
+        }
+
+        if ("admin".equals(currentTop)) {
+            if (adminAccess == null || guildData == null) return;
+            List<String> keys = visibleAdminTabKeys();
+            int current = keys.indexOf(currentAdminSection);
+            if (current < 0) current = 0;
+            int next = current + direction;
+            if (next < 0 || next >= keys.size()) return;
+            currentAdminSection = keys.get(next);
+            renderAdmin();
+        }
+    }
+
+    private List<String> visibleAdminTabKeys() {
+        List<String> keys = new ArrayList<>();
+        if (hasPerm("live_health")) keys.add("health");
+        if (guildData != null && guildData.optBoolean("full_admin", false)) keys.add("talk");
+        if (hasPerm("announcements") || hasPerm("scheduled_announcements")) keys.add("announce");
+        if (hasPerm("member_lookup")) keys.add("members");
+        if (hasPerm("homeworlds_admin")) keys.add("homeworlds");
+        if (hasPerm("server_settings")) keys.add("settings");
+        if (isAdminOwner()) {
+            keys.add("moderators");
+            keys.add("backups");
+        }
+        return keys;
     }
 
     private boolean handleAuthIntent(Intent intent) {
@@ -478,6 +566,7 @@ public class MainActivity extends Activity {
         };
         for (String[] tab : tabs) {
             TextView b = chip(tab[1], tab[0].equals(currentMySection));
+            b.setTag(tab[0]);
             b.setOnClickListener(v -> {
                 currentMySection = tab[0];
                 renderMySharla();
@@ -485,6 +574,8 @@ public class MainActivity extends Activity {
             row.addView(b, chipParams());
         }
         scroller.addView(row);
+        activeMenuScroller = scroller;
+        focusSelectedMenuTab(scroller, row, currentMySection);
         return scroller;
     }
 
@@ -932,17 +1023,35 @@ public class MainActivity extends Activity {
         addAdminTab(row, "backups", "💾 Backup & Restore", isAdminOwner());
 
         scroller.addView(row);
+        activeMenuScroller = scroller;
+        focusSelectedMenuTab(scroller, row, currentAdminSection);
         return scroller;
     }
 
     private void addAdminTab(LinearLayout row, String key, String label, boolean allowed) {
         if (!allowed) return;
         TextView b = chip(label, key.equals(currentAdminSection));
+        b.setTag(key);
         b.setOnClickListener(v -> {
             currentAdminSection = key;
             renderAdmin();
         });
         row.addView(b, chipParams());
+    }
+
+    private void focusSelectedMenuTab(
+            HorizontalScrollView scroller, LinearLayout row, String selectedKey) {
+        scroller.post(() -> {
+            for (int i = 0; i < row.getChildCount(); i++) {
+                View child = row.getChildAt(i);
+                Object tag = child.getTag();
+                if (tag != null && selectedKey.equals(String.valueOf(tag))) {
+                    int target = Math.max(0, child.getLeft() - dp(18));
+                    scroller.smoothScrollTo(target, 0);
+                    break;
+                }
+            }
+        });
     }
 
     private boolean hasPerm(String name) {
@@ -1242,8 +1351,8 @@ public class MainActivity extends Activity {
     private void promptRestoreBackup(String name, LinearLayout holder) {
         EditText input = edit("Type RESTORE", false);
         new AlertDialog.Builder(this)
-                .setTitle("Restore " + name + "?")
-                .setMessage("This will restart Sharla and Head Pool. Type RESTORE exactly to continue.")
+                .setTitle(rainbowNerdhalla("Restore " + name + "?"))
+                .setMessage(rainbowNerdhalla("This will restart Sharla and Head Pool. Type RESTORE exactly to continue."))
                 .setView(input)
                 .setNegativeButton("Cancel", null)
                 .setPositiveButton("Restore", (dialog, which) -> {
@@ -2680,11 +2789,56 @@ public class MainActivity extends Activity {
 
     private TextView text(String value, float size, int color, boolean bold) {
         TextView t = new TextView(this);
-        t.setText(value);
+        t.setText(rainbowNerdhalla(value));
         t.setTextSize(size);
         t.setTextColor(color);
         if (bold) t.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
         return t;
+    }
+
+    private CharSequence rainbowNerdhalla(String value) {
+        if (value == null || value.isEmpty()) return value == null ? "" : value;
+
+        SpannableString styled = new SpannableString(value);
+        String lower = value.toLowerCase(Locale.US);
+        String needle = "nerdhalla";
+        int[] palette = {
+                Color.rgb(255, 95, 109),
+                Color.rgb(255, 159, 67),
+                Color.rgb(255, 217, 61),
+                Color.rgb(107, 255, 149),
+                Color.rgb(77, 201, 255),
+                Color.rgb(155, 108, 255),
+                Color.rgb(255, 110, 199)
+        };
+
+        int start = 0;
+        while ((start = lower.indexOf(needle, start)) >= 0) {
+            for (int i = 0; i < needle.length(); i++) {
+                float position = needle.length() <= 1
+                        ? 0f
+                        : (i / (float) (needle.length() - 1)) * (palette.length - 1);
+                int left = Math.min(palette.length - 1, (int) Math.floor(position));
+                int right = Math.min(palette.length - 1, left + 1);
+                float amount = position - left;
+                int color = blendColor(palette[left], palette[right], amount);
+                styled.setSpan(
+                        new ForegroundColorSpan(color),
+                        start + i,
+                        start + i + 1,
+                        Spannable.SPAN_EXCLUSIVE_EXCLUSIVE);
+            }
+            start += needle.length();
+        }
+        return styled;
+    }
+
+    private int blendColor(int from, int to, float amount) {
+        amount = Math.max(0f, Math.min(1f, amount));
+        int r = Math.round(Color.red(from) + (Color.red(to) - Color.red(from)) * amount);
+        int g = Math.round(Color.green(from) + (Color.green(to) - Color.green(from)) * amount);
+        int b = Math.round(Color.blue(from) + (Color.blue(to) - Color.blue(from)) * amount);
+        return Color.rgb(r, g, b);
     }
 
     private TextView bottomItem(String label) {
@@ -2731,7 +2885,7 @@ public class MainActivity extends Activity {
 
     private Button styledButton(String label, int fill, int text) {
         Button b = new Button(this);
-        b.setText(label);
+        b.setText(rainbowNerdhalla(label));
         b.setAllCaps(false);
         b.setTextColor(text);
         b.setTextSize(14);
@@ -2895,15 +3049,17 @@ public class MainActivity extends Activity {
 
     private void confirm(String title, String message, Runnable yes) {
         new AlertDialog.Builder(this)
-                .setTitle(title)
-                .setMessage(message)
+                .setTitle(rainbowNerdhalla(title))
+                .setMessage(rainbowNerdhalla(message))
                 .setNegativeButton("Cancel", null)
                 .setPositiveButton("Confirm", (d, which) -> yes.run())
                 .show();
     }
 
     private void toast(String message) {
-        Toast.makeText(this, message == null ? "Done" : message, Toast.LENGTH_LONG).show();
+        Toast.makeText(this,
+                rainbowNerdhalla(message == null ? "Done" : message),
+                Toast.LENGTH_LONG).show();
     }
 
     @Override
