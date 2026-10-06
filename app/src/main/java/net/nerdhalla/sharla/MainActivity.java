@@ -2060,13 +2060,41 @@ public class MainActivity extends Activity {
                             1f));
 
             if (unlocked) {
+                LinearLayout earnedStatus = new LinearLayout(this);
+                earnedStatus.setOrientation(LinearLayout.VERTICAL);
+                earnedStatus.setGravity(Gravity.CENTER_HORIZONTAL);
+
                 TextView done = text("✓", 15, GREEN, true);
                 done.setGravity(Gravity.CENTER);
-                top.addView(
+                earnedStatus.addView(
                         done,
                         new LinearLayout.LayoutParams(
                                 dp(28),
-                                dp(28)));
+                                dp(24)));
+
+                String earnedAt = achievement.optString("unlocked_at", "");
+                String earnedDate = formatAchievementEarnedDate(earnedAt);
+
+                if (!earnedDate.isEmpty()) {
+                    TextView earned = text(
+                            earnedDate,
+                            9,
+                            MUTED,
+                            false);
+                    earned.setGravity(Gravity.CENTER_HORIZONTAL);
+                    earnedStatus.addView(
+                            earned,
+                            new LinearLayout.LayoutParams(
+                                    ViewGroup.LayoutParams.WRAP_CONTENT,
+                                    ViewGroup.LayoutParams.WRAP_CONTENT));
+                }
+
+                LinearLayout.LayoutParams earnedParams =
+                        new LinearLayout.LayoutParams(
+                                ViewGroup.LayoutParams.WRAP_CONTENT,
+                                ViewGroup.LayoutParams.WRAP_CONTENT);
+                earnedParams.leftMargin = dp(6);
+                top.addView(earnedStatus, earnedParams);
             }
 
             itemCard.addView(top);
@@ -2302,6 +2330,67 @@ public class MainActivity extends Activity {
         return false;
     }
 
+    private String achievementEarnedAt(JSONArray ledger, String key) {
+        if (key == null || key.isEmpty()) return "";
+
+        // Current portal may provide a direct key -> earned-date map.
+        JSONObject earnedDates =
+                meData == null
+                        ? null
+                        : meData.optJSONObject("achievement_earned_dates");
+
+        if (earnedDates != null) {
+            String mapped = earnedDates.optString(key, "");
+            if (!mapped.isEmpty()) return mapped;
+        }
+
+        // Also support the original achievement ledger format where
+        // unlocked_at is stored on the matching achievement row.
+        if (ledger != null) {
+            for (int i = 0; i < ledger.length(); i++) {
+                JSONObject item = ledger.optJSONObject(i);
+                if (item != null && key.equals(item.optString("key", ""))) {
+                    return item.optString("unlocked_at", "");
+                }
+            }
+        }
+
+        return "";
+    }
+
+    private String formatAchievementEarnedDate(String raw) {
+        if (raw == null) return "";
+
+        String value = raw.trim();
+        if (value.isEmpty()) return "";
+
+        try {
+            String datePart = value.length() >= 10
+                    ? value.substring(0, 10)
+                    : value;
+
+            String[] parts = datePart.split("-");
+            if (parts.length != 3) return datePart;
+
+            int year = Integer.parseInt(parts[0]);
+            int month = Integer.parseInt(parts[1]);
+            int day = Integer.parseInt(parts[2]);
+
+            Calendar cal = Calendar.getInstance();
+            cal.clear();
+            cal.set(year, month - 1, day);
+
+            java.text.SimpleDateFormat out =
+                    new java.text.SimpleDateFormat(
+                            "MMM d, yyyy",
+                            Locale.getDefault());
+
+            return out.format(cal.getTime());
+        } catch (Exception ignored) {
+            return value;
+        }
+    }
+
     private void addLiveAchievement(
             JSONArray out,
             JSONArray ledger,
@@ -2332,6 +2421,12 @@ public class MainActivity extends Activity {
             item.put("current", current);
             item.put("target", target);
             item.put("percent", percent);
+
+            String earnedAt = achievementEarnedAt(ledger, key);
+            if (!earnedAt.isEmpty()) {
+                item.put("unlocked_at", earnedAt);
+            }
+
             out.put(item);
         } catch (Exception ignored) {}
     }
