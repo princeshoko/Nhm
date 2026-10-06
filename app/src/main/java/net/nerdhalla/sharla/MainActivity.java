@@ -5685,13 +5685,13 @@ public class MainActivity extends Activity {
             case "Taco of Desitiny": return "🌮";
             case "Booger Sugar": return "❄️";
             case "White Pants": return "🤍";
-            default: return "🎁";
+            default: return "";
         }
     }
 
     private boolean isCustomInventoryItem(String name) {
         if (name == null || name.trim().isEmpty()) return false;
-        return "🎁".equals(lootIcon(name.trim()));
+        return lootIcon(name.trim()).isEmpty();
     }
 
     private int tokenValue(String rarity) {
