@@ -805,18 +805,70 @@ public class MainActivity extends Activity {
         lootRowParams.bottomMargin = dp(6);
         profile.addView(lootRow, lootRowParams);
 
-        profile.addView(label("Race"));
+        LinearLayout profileChoices = new LinearLayout(this);
+        profileChoices.setOrientation(LinearLayout.HORIZONTAL);
+        profileChoices.setGravity(Gravity.TOP);
+
+        LinearLayout raceCol = new LinearLayout(this);
+        raceCol.setOrientation(LinearLayout.VERTICAL);
+        raceCol.addView(label("Race"));
         Spinner race = darkSpinner(list("Person", "Place", "Thing", "Cat"));
         setSpinnerValue(race, p.optString("race", "Person"));
-        profile.addView(race, fullWrap());
+        raceCol.addView(
+                race,
+                new LinearLayout.LayoutParams(
+                        ViewGroup.LayoutParams.MATCH_PARENT,
+                        ViewGroup.LayoutParams.WRAP_CONTENT));
 
-        profile.addView(label("Class"));
+        LinearLayout classCol = new LinearLayout(this);
+        classCol.setOrientation(LinearLayout.VERTICAL);
+        classCol.addView(label("Class"));
         Spinner clazz = darkSpinner(list("Dumpster Fire", "Drama Llama", "Steve", "Has no Class"));
         setSpinnerValue(clazz, p.optString("class", "Dumpster Fire"));
-        profile.addView(clazz, fullWrap());
+        classCol.addView(
+                clazz,
+                new LinearLayout.LayoutParams(
+                        ViewGroup.LayoutParams.MATCH_PARENT,
+                        ViewGroup.LayoutParams.WRAP_CONTENT));
+
+        LinearLayout.LayoutParams choiceColParams =
+                new LinearLayout.LayoutParams(
+                        0,
+                        ViewGroup.LayoutParams.WRAP_CONTENT,
+                        1f);
+        choiceColParams.rightMargin = dp(6);
+        profileChoices.addView(raceCol, choiceColParams);
+
+        LinearLayout.LayoutParams classColParams =
+                new LinearLayout.LayoutParams(
+                        0,
+                        ViewGroup.LayoutParams.WRAP_CONTENT,
+                        1f);
+        classColParams.leftMargin = dp(6);
+        profileChoices.addView(classCol, classColParams);
+
+        LinearLayout.LayoutParams choicesParams =
+                new LinearLayout.LayoutParams(
+                        ViewGroup.LayoutParams.MATCH_PARENT,
+                        ViewGroup.LayoutParams.WRAP_CONTENT);
+        choicesParams.topMargin = dp(8);
+        profile.addView(profileChoices, choicesParams);
+
+        LinearLayout saveRow = new LinearLayout(this);
+        saveRow.setOrientation(LinearLayout.HORIZONTAL);
+        saveRow.setGravity(Gravity.END);
 
         Button save = primaryButton("Save Profile");
-        profile.addView(save, buttonParams());
+        LinearLayout.LayoutParams saveParams =
+                new LinearLayout.LayoutParams(dp(150), dp(46));
+        saveParams.topMargin = dp(10);
+        saveRow.addView(save, saveParams);
+        profile.addView(
+                saveRow,
+                new LinearLayout.LayoutParams(
+                        ViewGroup.LayoutParams.MATCH_PARENT,
+                        ViewGroup.LayoutParams.WRAP_CONTENT));
+
         save.setOnClickListener(v -> {
             JSONObject body = new JSONObject();
             try {
