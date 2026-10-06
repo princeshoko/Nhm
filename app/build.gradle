@@ -10,8 +10,8 @@ android {
         applicationId 'net.nerdhalla.sharla'
         minSdk 26
         targetSdk 35
-        versionCode 253
-        versionName '2.5.3'
+        versionCode 254
+        versionName '2.5.4'
     }
 
     buildTypes {
