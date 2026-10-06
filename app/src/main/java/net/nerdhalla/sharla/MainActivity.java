@@ -57,6 +57,8 @@ import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
+import java.util.HashSet;
+import java.util.Set;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
@@ -5678,6 +5680,7 @@ public class MainActivity extends Activity {
         switch (rarity) {
             case "Mythic": return Color.rgb(244, 114, 182);
             case "Legendary": return GOLD;
+            case "Epic": return PURPLE;
             case "Rare": return Color.rgb(96, 165, 250);
             case "Uncommon": return GREEN;
             default: return TEXT;
