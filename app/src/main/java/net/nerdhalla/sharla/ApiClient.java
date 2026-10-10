@@ -56,7 +56,7 @@ public class ApiClient {
         conn.setReadTimeout(25000);
         conn.setRequestMethod(method);
         conn.setRequestProperty("Accept", "application/json");
-        conn.setRequestProperty("User-Agent", "NerdhallaAndroid/2.4.6");
+        conn.setRequestProperty("User-Agent", "NerdhallaAndroid/2.5.5");
 
         String cookie = CookieManager.getInstance().getCookie(BASE);
         if (cookie != null && !cookie.isEmpty()) {
