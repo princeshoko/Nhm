@@ -1245,7 +1245,10 @@ public class MainActivity extends Activity {
             LinearLayout details = new LinearLayout(this);
             details.setOrientation(LinearLayout.VERTICAL);
 
-            TextView itemName = text(lootIcon(name) + " " + name, 15, TEXT, true);
+            String shopIcon = item.optString("emoji", item.optString("icon", ""));
+            if (shopIcon.isEmpty() || shopIcon.startsWith("http")) shopIcon = lootIcon(name);
+            if (shopIcon.isEmpty()) shopIcon = "🛍️";
+            TextView itemName = text(shopIcon + " " + name, 15, TEXT, true);
             details.addView(itemName);
 
             String meta = rarity + "  •  " + price + " 🪙  •  Owned ×" + owned;
