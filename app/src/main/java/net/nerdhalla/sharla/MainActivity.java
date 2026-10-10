@@ -3143,20 +3143,28 @@ public class MainActivity extends Activity {
 
         LinearLayout actions = card();
         actions.setOrientation(LinearLayout.HORIZONTAL);
-        actions.setPadding(dp(12), dp(10), dp(12), dp(10));
+        actions.setPadding(dp(10), dp(10), dp(10), dp(10));
 
         Button create = primaryButton("Create Backup");
-        create.setTextSize(12);
+        create.setTextSize(11);
         LinearLayout.LayoutParams createParams =
                 new LinearLayout.LayoutParams(0, dp(40), 1f);
-        createParams.rightMargin = dp(5);
+        createParams.rightMargin = dp(4);
         actions.addView(create, createParams);
 
-        Button refresh = secondaryButton("Refresh Backups");
-        refresh.setTextSize(12);
+        Button fullBackup = primaryButton("Full Backup");
+        fullBackup.setTextSize(11);
+        LinearLayout.LayoutParams fullBackupParams =
+                new LinearLayout.LayoutParams(0, dp(40), 1f);
+        fullBackupParams.leftMargin = dp(2);
+        fullBackupParams.rightMargin = dp(2);
+        actions.addView(fullBackup, fullBackupParams);
+
+        Button refresh = secondaryButton("Refresh");
+        refresh.setTextSize(11);
         LinearLayout.LayoutParams refreshParams =
                 new LinearLayout.LayoutParams(0, dp(40), 1f);
-        refreshParams.leftMargin = dp(5);
+        refreshParams.leftMargin = dp(4);
         actions.addView(refresh, refreshParams);
 
         c.addView(actions, cardParams());
@@ -3170,10 +3178,80 @@ public class MainActivity extends Activity {
                     (result.optString("database", "").isEmpty() ? "" : ". " + result.optString("database", "")));
             loadBackupsInto(holder);
         }));
+
+        fullBackup.setOnClickListener(v -> runFullBackup());
+
         refresh.setOnClickListener(v -> loadBackupsInto(holder));
 
         loadBackupsInto(holder);
         return wrapScroll(c);
+    }
+
+    private void runFullBackup() {
+        showBusy(true);
+        io.execute(() -> {
+            String cpanelMessage;
+            String venomMessage;
+            boolean cpanelOk = true;
+            boolean venomOk = true;
+
+            try {
+                JSONObject result = api.api(
+                        "suite_cpanel_backup_run",
+                        "POST",
+                        new JSONObject());
+                cpanelMessage = result.optString(
+                        "message",
+                        result.optBoolean("started", false)
+                                ? "cPanel full backup started."
+                                : "cPanel full backup request accepted.");
+            } catch (Exception e) {
+                cpanelOk = false;
+                cpanelMessage = e.getMessage() == null
+                        ? "cPanel full backup failed."
+                        : e.getMessage();
+            }
+
+            try {
+                JSONObject result = api.api(
+                        "suite_venom_backup_run",
+                        "POST",
+                        new JSONObject());
+                venomMessage = result.optString(
+                        "message",
+                        result.optBoolean("started", false)
+                                ? "Venom full backup started."
+                                : "Venom full backup request accepted.");
+            } catch (Exception e) {
+                venomOk = false;
+                venomMessage = e.getMessage() == null
+                        ? "Venom full backup failed."
+                        : e.getMessage();
+            }
+
+            final boolean finalCpanelOk = cpanelOk;
+            final boolean finalVenomOk = venomOk;
+            final String finalCpanelMessage = cpanelMessage;
+            final String finalVenomMessage = venomMessage;
+
+            main.post(() -> {
+                showBusy(false);
+
+                if (finalCpanelOk && finalVenomOk) {
+                    toast("Full Backup started.\n\ncPanel: " +
+                            finalCpanelMessage +
+                            "\nVenom: " +
+                            finalVenomMessage);
+                } else {
+                    StringBuilder message = new StringBuilder("Full Backup result:");
+                    message.append("\n\ncPanel: ")
+                            .append(finalCpanelOk ? finalCpanelMessage : "ERROR — " + finalCpanelMessage);
+                    message.append("\nVenom: ")
+                            .append(finalVenomOk ? finalVenomMessage : "ERROR — " + finalVenomMessage);
+                    toast(message.toString());
+                }
+            });
+        });
     }
 
     private void loadBackupsInto(LinearLayout holder) {
