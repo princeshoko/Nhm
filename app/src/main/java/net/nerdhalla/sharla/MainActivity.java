@@ -109,6 +109,24 @@ public class MainActivity extends Activity {
     private String currentAdminSection = "health";
     private long scheduleAtMillis = 0;
     private boolean authCheckRunning = false;
+    private boolean appInForeground = false;
+    private JSONObject challengesData;
+    private boolean challengesLoading = false;
+    private long challengesLastFetchElapsed = 0L;
+    private long challengesClockOffsetMs = 0L;
+    private LinearLayout challengesCards;
+    private TextView challengesNotice;
+    private TextView dailyChallengeReset;
+    private TextView weeklyChallengeReset;
+    private final Runnable challengesTicker = new Runnable() {
+        @Override public void run() {
+            if (appInForeground && viewingChallenges()) {
+                updateChallengeClocks();
+                refreshChallenges(false);
+            }
+            main.postDelayed(this, 1000L);
+        }
+    };
 
     private String selectedMemberId = "";
     private String selectedMemberName = "";
@@ -152,6 +170,7 @@ public class MainActivity extends Activity {
         root.requestApplyInsets();
 
         showStartup();
+        main.postDelayed(challengesTicker, 1000L);
         if (!handleAuthIntent(getIntent())) {
             checkSession();
         }
@@ -210,7 +229,7 @@ public class MainActivity extends Activity {
 
         if ("my".equals(currentTop)) {
             if (meData == null) return;
-            List<String> keys = list("profile", "shop", "homeworlds", "inventory", "achievements");
+            List<String> keys = list("profile", "shop", "homeworlds", "inventory", "achievements", "challenges");
             int current = keys.indexOf(currentMySection);
             if (current < 0) current = 0;
             int next = Math.floorMod(current + direction, keys.size());
@@ -667,6 +686,9 @@ public class MainActivity extends Activity {
             case "achievements":
                 page = renderAchievementsPage();
                 break;
+            case "challenges":
+                page = renderChallengesPage();
+                break;
             default:
                 page = renderProfilePage();
         }
@@ -686,7 +708,8 @@ public class MainActivity extends Activity {
                 {"shop", "🛍️ Sharla Shop"},
                 {"homeworlds", "🌌 Homeworlds"},
                 {"inventory", "🎒 Inventory"},
-                {"achievements", "🏆 Achievements"}
+                {"achievements", "🏆 Achievements"},
+                {"challenges", "🎯 Challenges"}
         };
         for (String[] tab : tabs) {
             TextView b = chip(tab[1], tab[0].equals(currentMySection));
@@ -1957,6 +1980,204 @@ public class MainActivity extends Activity {
             default: return 0;
         }
     }
+
+
+    // ===== Live daily and weekly Challenges (same signed-in portal as the website) =====
+    private boolean viewingChallenges() {
+        return "my".equals(currentTop) && "challenges".equals(currentMySection)
+                && meData != null;
+    }
+
+    private View renderChallengesPage() {
+        LinearLayout column = scrollColumn();
+        column.addView(pageHeading("Challenges",
+                "Live daily and weekly goals from Sharla. Progress updates every 20 seconds."));
+
+        LinearLayout noticeCard = cardInner();
+        challengesNotice = text(challengesData == null ? "Loading your challenges…" :
+                "Live with Discord • Updates every 20 seconds", 13, MUTED, false);
+        noticeCard.addView(challengesNotice);
+        column.addView(noticeCard, cardParams());
+
+        challengesCards = new LinearLayout(this);
+        challengesCards.setOrientation(LinearLayout.VERTICAL);
+        column.addView(challengesCards, fullWrap());
+        if (challengesData != null) {
+            renderChallengeCards();
+        } else {
+            challengesCards.addView(infoCard("🎯 Challenges",
+                    "Checking your current daily and weekly objectives."), cardParams());
+        }
+
+        Button refresh = secondaryButton("↻ Refresh Challenges");
+        refresh.setOnClickListener(v -> refreshChallenges(true));
+        column.addView(refresh, cardParams());
+
+        main.post(() -> refreshChallenges(true));
+        return wrapScroll(column);
+    }
+
+    private void refreshChallenges(boolean force) {
+        if (!viewingChallenges() || !appInForeground || challengesLoading) return;
+        long now = SystemClock.elapsedRealtime();
+        if (!force && challengesLastFetchElapsed != 0L &&
+                now - challengesLastFetchElapsed < 20000L) return;
+
+        challengesLastFetchElapsed = now;
+        challengesLoading = true;
+        if (challengesData == null && challengesNotice != null) {
+            challengesNotice.setText("Loading your challenges…");
+        }
+        io.execute(() -> {
+            try {
+                JSONObject result = api.api("challenges");
+                if (result.optJSONObject("daily") == null ||
+                        result.optJSONObject("weekly") == null) {
+                    throw new Exception("Sharla returned incomplete challenge data.");
+                }
+                main.post(() -> {
+                    challengesLoading = false;
+                    boolean changed = challengesData == null ||
+                            !challengesData.toString().equals(result.toString());
+                    challengesData = result;
+                    challengesClockOffsetMs =
+                            result.optLong("server_time", System.currentTimeMillis() / 1000L)
+                                    * 1000L - System.currentTimeMillis();
+                    if (viewingChallenges() && challengesCards != null) {
+                        if (changed) renderChallengeCards();
+                        updateChallengeClocks();
+                        if (challengesNotice != null) {
+                            challengesNotice.setText("✓ Live with Sharla • Refreshes every 20 seconds");
+                            challengesNotice.setTextColor(GREEN);
+                        }
+                    }
+                });
+            } catch (Exception e) {
+                String error = e.getMessage() == null ? "Unknown error" : e.getMessage();
+                main.post(() -> {
+                    challengesLoading = false;
+                    if (viewingChallenges() && challengesNotice != null) {
+                        challengesNotice.setText("Refresh failed: " + error +
+                                (challengesData == null ? "" : " • Showing last update"));
+                        challengesNotice.setTextColor(RED);
+                    }
+                });
+            }
+        });
+    }
+
+    private void renderChallengeCards() {
+        if (challengesData == null || challengesCards == null) return;
+        challengesCards.removeAllViews();
+        challengesCards.addView(renderChallengePeriod("daily", "☀️ Daily Challenges"),
+                cardParams());
+        challengesCards.addView(renderChallengePeriod("weekly", "📅 Weekly Challenges"),
+                cardParams());
+        updateChallengeClocks();
+    }
+
+    private View renderChallengePeriod(String key, String label) {
+        JSONObject period = challengesData.optJSONObject(key);
+        if (period == null) period = new JSONObject();
+        JSONArray items = period.optJSONArray("items");
+        LinearLayout group = card();
+        group.addView(text(label, 18, GOLD, true));
+
+        TextView countdownText = text("Checking reset time…", 12, MUTED, false);
+        countdownText.setPadding(0, dp(4), 0, dp(10));
+        group.addView(countdownText);
+        if ("daily".equals(key)) dailyChallengeReset = countdownText;
+        else weeklyChallengeReset = countdownText;
+
+        int total = items == null ? 0 : items.length(), completed = 0, claimed = 0;
+        for (int i = 0; i < total; i++) {
+            JSONObject item = items.optJSONObject(i);
+            if (item == null) continue;
+            if (item.optBoolean("complete", false)) completed++;
+            if (item.optBoolean("claimed", false)) claimed++;
+        }
+        group.addView(text(completed + " of " + total + " completed • " +
+                claimed + " rewards claimed", 13, MUTED, false));
+        group.addView(spacer(9));
+
+        if (total == 0) {
+            group.addView(text("There are no active challenges for this period.",
+                    13, MUTED, false));
+            return group;
+        }
+        for (int i = 0; i < total; i++) {
+            JSONObject item = items.optJSONObject(i);
+            if (item == null) continue;
+            LinearLayout box = cardInner();
+            String emoji = item.optString("emoji", "🎯");
+            String name = item.optString("name", "Challenge");
+            box.addView(text(emoji + " " + name, 16, TEXT, true));
+
+            String description = item.optString("description", "");
+            if (!description.isEmpty()) {
+                TextView detail = text(description, 13, MUTED, false);
+                detail.setPadding(0, dp(4), 0, dp(6));
+                box.addView(detail);
+            }
+            int target = Math.max(1, item.optInt("target", 1));
+            int progress = Math.max(0, item.optInt("progress", 0));
+            boolean finished = progress >= target || item.optBoolean("complete", false);
+            boolean paid = item.optBoolean("claimed", false);
+
+            ProgressBar bar = new ProgressBar(this, null,
+                    android.R.attr.progressBarStyleHorizontal);
+            bar.setMax(1000);
+            bar.setProgress((int)Math.min(1000L, Math.round(1000.0 * progress / target)));
+            bar.setProgressTintList(android.content.res.ColorStateList.valueOf(
+                    paid ? GREEN : finished ? GOLD : PURPLE));
+            bar.setProgressBackgroundTintList(
+                    android.content.res.ColorStateList.valueOf(LINE));
+            LinearLayout.LayoutParams barLayout = new LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT, dp(8));
+            barLayout.setMargins(0, dp(9), 0, dp(8));
+            box.addView(bar, barLayout);
+
+            box.addView(text(Math.min(progress, target) + " / " + target +
+                    " • 🪙 " + item.optInt("reward", 0) + " Horse Tokens", 13,
+                    TEXT, false));
+            TextView state = text(paid ? "✓ Reward claimed" :
+                    finished ? "✓ Complete" : "In progress", 12,
+                    paid ? GREEN : finished ? GOLD : MUTED, true);
+            state.setPadding(0, dp(5), 0, 0);
+            box.addView(state);
+
+            LinearLayout.LayoutParams itemLayout = new LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT,
+                    ViewGroup.LayoutParams.WRAP_CONTENT);
+            itemLayout.bottomMargin = dp(9);
+            group.addView(box, itemLayout);
+        }
+        return group;
+    }
+
+    private void updateChallengeClocks() {
+        if (challengesData == null) return;
+        long current = (System.currentTimeMillis() + challengesClockOffsetMs) / 1000L;
+        JSONObject daily = challengesData.optJSONObject("daily");
+        JSONObject weekly = challengesData.optJSONObject("weekly");
+        if (daily != null && dailyChallengeReset != null) {
+            dailyChallengeReset.setText("Resets in " +
+                    challengeCountdown(daily.optLong("reset_at") - current));
+        }
+        if (weekly != null && weeklyChallengeReset != null) {
+            weeklyChallengeReset.setText("Resets in " +
+                    challengeCountdown(weekly.optLong("reset_at") - current));
+        }
+    }
+
+    private String challengeCountdown(long seconds) {
+        long safe = Math.max(0L, seconds);
+        long days = safe / 86400L, hours = (safe % 86400L) / 3600L,
+                minutes = (safe % 3600L) / 60L, secs = safe % 60L;
+        return (days > 0 ? days + "d " : "") +
+                String.format(Locale.US, "%02d:%02d:%02d", hours, minutes, secs);
+    }
+    // ===== End live Challenges =====
 
     private View renderAchievementsPage() {
         LinearLayout c = scrollColumn();
@@ -5955,7 +6176,20 @@ public class MainActivity extends Activity {
     }
 
     @Override
+    protected void onResume() {
+        super.onResume();
+        appInForeground = true;
+    }
+
+    @Override
+    protected void onPause() {
+        appInForeground = false;
+        super.onPause();
+    }
+
+    @Override
     protected void onDestroy() {
+        main.removeCallbacks(challengesTicker);
         io.shutdownNow();
         super.onDestroy();
     }
