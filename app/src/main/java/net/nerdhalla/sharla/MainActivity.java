@@ -903,6 +903,7 @@ public class MainActivity extends Activity {
 
         String lastLootItem = "";
         String lastLootRarity = "";
+        long lastLootAt = 0L;
         if (loot != null) {
             lastLootItem = loot.optString(
                     "last_loot_item",
@@ -910,10 +911,12 @@ public class MainActivity extends Activity {
             lastLootRarity = loot.optString(
                     "last_loot_rarity",
                     loot.optString("last_rarity", ""));
+            lastLootAt = loot.optLong("last_loot", 0L);
         }
         if (lastLootItem.isEmpty()) {
             lastLootItem = loadLastLootValue("item");
             lastLootRarity = loadLastLootValue("rarity");
+            lastLootAt = loadLastLootTime();
         }
 
         LinearLayout lastLootBox = new LinearLayout(this);
@@ -960,6 +963,16 @@ public class MainActivity extends Activity {
                         12,
                         rarityColor(lastLootRarity),
                         true));
+            }
+
+            if (lastLootAt > 0L) {
+                TextView claimedAt = text(
+                        "Claimed: " + formatLocalDateTime(lastLootAt),
+                        11,
+                        MUTED,
+                        false);
+                claimedAt.setPadding(0, dp(3), 0, 0);
+                lastLootBox.addView(claimedAt);
             }
         }
 
@@ -1070,7 +1083,9 @@ public class MainActivity extends Activity {
     }
 
     private void applyLootResultLocally(JSONObject result, String rarity, String itemName) {
-        saveLastLootValue(itemName, rarity);
+        long now = result.optLong("server_time", System.currentTimeMillis() / 1000L);
+        long claimedAt = result.optLong("last_loot", now);
+        saveLastLootValue(itemName, rarity, claimedAt);
         if (meData == null) return;
 
         JSONObject loot = meData.optJSONObject("loot");
@@ -1079,13 +1094,12 @@ public class MainActivity extends Activity {
             try { meData.put("loot", loot); } catch (Exception ignored) {}
         }
 
-        long now = result.optLong("server_time", System.currentTimeMillis() / 1000L);
         long cooldown = result.optLong("cooldown_seconds", 43200L);
         long remaining = result.optLong("remaining_seconds", cooldown);
 
         try {
             loot.put("ready", false);
-            loot.put("last_loot", result.optLong("last_loot", now));
+            loot.put("last_loot", claimedAt);
             loot.put("next_loot", result.optLong("next_loot", now + cooldown));
             loot.put("cooldown_seconds", cooldown);
             loot.put("remaining_seconds", remaining);
@@ -1883,6 +1897,18 @@ public class MainActivity extends Activity {
                             0,
                             ViewGroup.LayoutParams.WRAP_CONTENT,
                             1f));
+
+            int quantity = Math.max(0, item.optInt("quantity", 0));
+            TextView quantityBadge = text("×" + quantity, 13, TEXT, true);
+            quantityBadge.setGravity(Gravity.CENTER);
+            quantityBadge.setPadding(dp(7), dp(3), dp(7), dp(3));
+            quantityBadge.setBackground(roundRect(PANEL2, 10, LINE, 1));
+            LinearLayout.LayoutParams quantityParams =
+                    new LinearLayout.LayoutParams(
+                            ViewGroup.LayoutParams.WRAP_CONTENT,
+                            ViewGroup.LayoutParams.WRAP_CONTENT);
+            quantityParams.leftMargin = dp(8);
+            itemCard.addView(quantityBadge, quantityParams);
 
             Button sell = secondaryButton(tokenValue(rarity) + " 🪙");
             sell.setTextSize(13);
@@ -3858,175 +3884,284 @@ public class MainActivity extends Activity {
 
     private View renderHealthPage() {
         LinearLayout c = scrollColumn();
-        c.addView(pageHeading("Live Bot Health", "Live Sharla, Head Pool, and website heartbeat status."));
+        c.addView(pageHeading(
+                "Live Bot Health",
+                "Independent live heartbeats for Venom, Sharla, and Head Pool."));
+
+        LinearLayout controls = card();
+        controls.setOrientation(LinearLayout.HORIZONTAL);
+        controls.setGravity(Gravity.CENTER_VERTICAL);
+        controls.setPadding(dp(10), dp(8), dp(10), dp(8));
+
+        TextView hint = text("Website heartbeat status", 12, MUTED, false);
+        controls.addView(
+                hint,
+                new LinearLayout.LayoutParams(
+                        0,
+                        ViewGroup.LayoutParams.WRAP_CONTENT,
+                        1f));
+
+        Button refresh = secondaryButton("Refresh Health");
+        refresh.setTextSize(12);
+        controls.addView(
+                refresh,
+                new LinearLayout.LayoutParams(dp(130), dp(40)));
+
+        c.addView(controls, cardParams());
 
         LinearLayout holder = card();
-        holder.addView(text("Checking…", 14, MUTED, false));
+        holder.addView(text("Checking heartbeats…", 14, MUTED, false));
         c.addView(holder, cardParams());
 
-        io.execute(() -> {
-            JSONObject health = null;
-            JSONObject heartbeat = null;
-            String healthError = null;
-            String heartbeatError = null;
-
-            try {
-                health = api.api("mod_health", "GET", null,
-                        "&guild_id=" + URLEncoder.encode(currentGuildId, "UTF-8"));
-            } catch (Exception e) {
-                healthError = e.getMessage();
-            }
-
-            try {
-                heartbeat = api.publicJson("api/headpool.json");
-            } catch (Exception e) {
-                heartbeatError = e.getMessage();
-            }
-
-            final JSONObject finalHealth = health;
-            final JSONObject finalHeartbeat = heartbeat;
-            final String finalHealthError = healthError;
-            final String finalHeartbeatError = heartbeatError;
-
-            main.post(() -> {
-                holder.removeAllViews();
-
-                if (finalHealth != null) {
-                    LinearLayout botRow = new LinearLayout(this);
-                    botRow.setOrientation(LinearLayout.HORIZONTAL);
-                    botRow.setGravity(Gravity.TOP);
-
-                    LinearLayout.LayoutParams botLeftParams =
-                            new LinearLayout.LayoutParams(
-                                    0,
-                                    ViewGroup.LayoutParams.WRAP_CONTENT,
-                                    1f);
-                    botLeftParams.rightMargin = dp(5);
-                    botRow.addView(
-                            botHealthCard(
-                                    "Sharla",
-                                    finalHealth.optJSONObject("sharla"),
-                                    true),
-                            botLeftParams);
-
-                    LinearLayout.LayoutParams botRightParams =
-                            new LinearLayout.LayoutParams(
-                                    0,
-                                    ViewGroup.LayoutParams.WRAP_CONTENT,
-                                    1f);
-                    botRightParams.leftMargin = dp(5);
-                    botRow.addView(
-                            botHealthCard(
-                                    "Head Pool",
-                                    finalHealth.optJSONObject("headpool"),
-                                    false),
-                            botRightParams);
-
-                    holder.addView(
-                            botRow,
-                            new LinearLayout.LayoutParams(
-                                    ViewGroup.LayoutParams.MATCH_PARENT,
-                                    ViewGroup.LayoutParams.WRAP_CONTENT));
-                    holder.addView(spacer(10));
-                } else {
-                    holder.addView(text("Bot health: " +
-                            (finalHealthError == null ? "Unavailable" : finalHealthError), 14, RED, false));
-                    holder.addView(spacer(12));
-                }
-
-                holder.addView(heartbeatHealthCard(finalHeartbeat, finalHeartbeatError));
-
-                if (finalHealth != null) {
-                    holder.addView(spacer(8));
-                    holder.addView(text("Checked " + finalHealth.optString("checked_at", ""), 12, MUTED, false));
-                }
-            });
-        });
+        refresh.setOnClickListener(v -> loadHeartbeatHealth(holder));
+        loadHeartbeatHealth(holder);
 
         return wrapScroll(c);
     }
 
-    private View heartbeatHealthCard(JSONObject data, String error) {
+    private void loadHeartbeatHealth(LinearLayout holder) {
+        holder.removeAllViews();
+        holder.addView(text("Checking heartbeats…", 14, MUTED, false));
+
+        io.execute(() -> {
+            JSONObject venom = null;
+            JSONObject sharla = null;
+            JSONObject headpool = null;
+            String venomError = null;
+            String sharlaError = null;
+            String headpoolError = null;
+
+            try {
+                venom = api.publicJson("venom-heartbeat-status.php");
+            } catch (Exception e) {
+                venomError = e.getMessage();
+            }
+
+            try {
+                sharla = api.publicJson("sharla-heartbeat-status.php");
+            } catch (Exception e) {
+                sharlaError = e.getMessage();
+            }
+
+            try {
+                headpool = api.publicJson("api/headpool.json");
+            } catch (Exception e) {
+                headpoolError = e.getMessage();
+            }
+
+            final JSONObject finalVenom = venom;
+            final JSONObject finalSharla = sharla;
+            final JSONObject finalHeadpool = headpool;
+            final String finalVenomError = venomError;
+            final String finalSharlaError = sharlaError;
+            final String finalHeadpoolError = headpoolError;
+
+            main.post(() -> {
+                holder.removeAllViews();
+
+                holder.addView(heartbeatPanel(
+                        "venom",
+                        finalVenom,
+                        finalVenomError));
+
+                holder.addView(spacer(10));
+
+                holder.addView(heartbeatPanel(
+                        "sharla",
+                        finalSharla,
+                        finalSharlaError));
+
+                holder.addView(spacer(10));
+
+                holder.addView(heartbeatPanel(
+                        "headpool",
+                        finalHeadpool,
+                        finalHeadpoolError));
+
+                holder.addView(spacer(8));
+                holder.addView(text(
+                        "Checked " + formatLocalDateTime(System.currentTimeMillis() / 1000L),
+                        11,
+                        MUTED,
+                        false));
+            });
+        });
+    }
+
+    private View heartbeatPanel(String kind, JSONObject data, String error) {
         LinearLayout box = cardInner();
         box.setPadding(dp(12), dp(10), dp(12), dp(10));
-        box.addView(text("💓 Head Pool Website Heartbeat", 16, TEXT, true));
+
+        String title;
+        String subtitle;
+        long defaultThreshold;
+        String timestampField;
+
+        switch (kind) {
+            case "venom":
+                title = "💓 Venom Server Heartbeat";
+                subtitle = "Whole Venom server heartbeat. Offline after 600 seconds.";
+                defaultThreshold = 600L;
+                timestampField = "last_heartbeat";
+                break;
+            case "sharla":
+                title = "💓 Sharla Website Heartbeat";
+                subtitle = "Sharla heartbeat and Discord gateway. Offline after 150 seconds.";
+                defaultThreshold = 150L;
+                timestampField = "last_heartbeat";
+                break;
+            default:
+                title = "💓 Head Pool Website Heartbeat";
+                subtitle = "Direct heartbeat from Head Pool. Offline after 150 seconds.";
+                defaultThreshold = 150L;
+                timestampField = "updated_at";
+                break;
+        }
+
+        box.addView(text(title, 16, TEXT, true));
+        TextView subtitleView = text(subtitle, 11, MUTED, false);
+        subtitleView.setPadding(0, dp(2), 0, dp(3));
+        box.addView(subtitleView);
 
         if (data == null) {
-            box.addView(healthStatusLine(false, "Heartbeat unavailable"));
+            box.addView(healthStatusLine(false, "Unavailable"));
             box.addView(healthStatPair(
                     "Last heartbeat", "Unknown",
-                    "Offline threshold", "150 sec"));
-            box.addView(healthCenteredStat("Updated", "—"));
+                    "Offline threshold", defaultThreshold + " sec"));
             box.addView(healthStatPair(
                     "HTTP result", "Failed",
-                    "Commands", "—"));
-            box.addView(healthStatPair(
-                    "Servers", "—",
-                    "Bot uptime", "—"));
-            box.addView(healthSingleStat("Website state", "Unknown"));
+                    "Website state", "Unknown"));
 
-            TextView detail = text(
-                    "Could not read api/headpool.json" +
-                            (error == null ? "." : ": " + error),
+            TextView note = text(
+                    "⚠️ Could not read " + title.replace("💓 ", "") +
+                            (error == null || error.isEmpty() ? "." : ": " + error),
                     11,
-                    MUTED,
+                    RED,
                     false);
-            detail.setPadding(0, dp(6), 0, 0);
-            box.addView(detail);
+            note.setPadding(0, dp(7), 0, 0);
+            box.addView(note);
             return box;
         }
 
-        String updatedAt = data.optString("updated_at", "");
-        long ageSeconds = -1;
-        try {
-            ageSeconds = Math.max(
-                    0,
-                    (System.currentTimeMillis()
-                            - Instant.parse(updatedAt).toEpochMilli()) / 1000L);
-        } catch (Exception ignored) {}
+        long threshold = data.optLong("threshold_seconds", defaultThreshold);
+        long age = heartbeatAgeSeconds(data, timestampField);
+        boolean fresh = age >= 0L && age < threshold;
+        String rawTimestamp = data.optString(timestampField, "");
 
-        boolean healthy = ageSeconds >= 0 && ageSeconds < 150;
-        long commandTotal = data.has("command_count")
-                ? data.optLong("command_count", 0)
-                : data.optLong("slash_commands", 0)
-                        + data.optLong("prefix_commands", 0);
+        if ("sharla".equals(kind) && data.has("heartbeat_fresh")) {
+            fresh = data.optBoolean("heartbeat_fresh", fresh);
+        }
 
-        long uptime = data.optLong("uptime_seconds", 0);
-        if (healthy && ageSeconds >= 0) uptime += ageSeconds;
+        boolean healthy = fresh;
+        String stateLabel = fresh ? "Healthy" : "Stale / offline";
 
-        box.addView(healthStatusLine(
-                healthy,
-                healthy ? "Heartbeat fresh" : "Heartbeat stale"));
+        if ("venom".equals(kind) && data.has("healthy")) {
+            healthy = data.optBoolean("healthy", fresh);
+            stateLabel = healthy ? "Healthy" : "Stale / offline";
+        }
+
+        boolean discordReady = true;
+        if ("sharla".equals(kind)) {
+            discordReady = data.optBoolean("discord_ready", false);
+            healthy = fresh && discordReady;
+            if (fresh && !discordReady) {
+                stateLabel = "Gateway not ready";
+            } else {
+                stateLabel = healthy ? "Healthy" : "Stale / offline";
+            }
+        }
+
+        box.addView(healthStatusLine(healthy, stateLabel));
 
         box.addView(healthStatPair(
                 "Last heartbeat",
-                ageSeconds < 0 ? "Unknown" : heartbeatAgeText(ageSeconds),
+                age < 0L ? "Unknown" : heartbeatAgeText(age),
                 "Offline threshold",
-                "150 sec"));
+                threshold + " sec"));
 
-        box.addView(healthCenteredStat(
+        box.addView(healthStatPair(
                 "Updated",
-                updatedAt.isEmpty() ? "—" : updatedAt));
-
-        box.addView(healthStatPair(
+                rawTimestamp.isEmpty() ? "—" : formatIsoLocal(rawTimestamp),
                 "HTTP result",
-                "HTTP 200",
-                "Commands",
-                commandTotal > 0 ? String.valueOf(commandTotal) : "—"));
+                "OK"));
 
-        box.addView(healthStatPair(
-                "Servers",
-                data.has("guilds")
-                        ? String.valueOf(data.optInt("guilds", 0))
-                        : "—",
-                "Bot uptime",
-                uptime > 0 ? durationText(uptime) : "—"));
+        if ("venom".equals(kind)) {
+            box.addView(healthStatPair(
+                    "Host",
+                    data.optString("host", "venom.darkpenguin.net"),
+                    "Website state",
+                    age < 0L ? "Unknown" : (fresh ? "Fresh" : "Expired")));
+        } else if ("sharla".equals(kind)) {
+            box.addView(healthStatPair(
+                    "Discord gateway",
+                    discordReady ? "Ready" : "Not ready",
+                    "Website state",
+                    age < 0L ? "Unknown" : (fresh ? "Fresh" : "Expired")));
 
-        box.addView(healthSingleStat(
-                "Website state",
-                ageSeconds < 0
-                        ? "Unknown"
-                        : (healthy ? "Fresh" : "Expired")));
+            if (data.has("latency_ms") || data.has("guild_count")) {
+                box.addView(healthStatPair(
+                        "Latency",
+                        data.has("latency_ms")
+                                ? data.optInt("latency_ms", 0) + " ms"
+                                : "—",
+                        "Servers",
+                        data.has("guild_count")
+                                ? String.valueOf(data.optInt("guild_count", 0))
+                                : "—"));
+            }
+        } else {
+            long commandTotal = data.has("command_count")
+                    ? data.optLong("command_count", 0L)
+                    : data.optLong("slash_commands", 0L)
+                            + data.optLong("prefix_commands", 0L);
+
+            long uptime = data.optLong("uptime_seconds", 0L);
+            if (fresh && age >= 0L) uptime += age;
+
+            box.addView(healthStatPair(
+                    "Servers",
+                    data.has("guilds")
+                            ? String.valueOf(data.optInt("guilds", 0))
+                            : "—",
+                    "Commands",
+                    commandTotal > 0L ? String.valueOf(commandTotal) : "—"));
+
+            box.addView(healthStatPair(
+                    "Bot uptime",
+                    uptime > 0L ? durationText(uptime) : "—",
+                    "Website state",
+                    age < 0L ? "Unknown" : (fresh ? "Fresh" : "Expired")));
+        }
+
+        String noteText;
+        int noteColor;
+
+        if ("venom".equals(kind)) {
+            noteText = fresh
+                    ? "✅ Nerdhalla is receiving a fresh Venom heartbeat."
+                    : "⚠️ Nerdhalla is not receiving a fresh Venom heartbeat.";
+            noteColor = fresh ? GREEN : RED;
+        } else if ("sharla".equals(kind)) {
+            if (fresh && discordReady) {
+                noteText = "✅ Nerdhalla is receiving a fresh Sharla heartbeat, and her Discord gateway is ready.";
+                noteColor = GREEN;
+            } else if (fresh) {
+                noteText = "⚠️ Nerdhalla is receiving a fresh Sharla heartbeat, but her Discord gateway is not ready.";
+                noteColor = GOLD;
+            } else {
+                noteText = "⚠️ Nerdhalla is not receiving a fresh Sharla heartbeat.";
+                noteColor = RED;
+            }
+        } else {
+            noteText = fresh
+                    ? "✅ Nerdhalla is receiving a fresh Head Pool heartbeat."
+                    : "⚠️ Nerdhalla is not receiving a fresh Head Pool heartbeat.";
+            noteColor = fresh ? GREEN : RED;
+        }
+
+        TextView note = text(noteText, 11, noteColor, false);
+        note.setPadding(0, dp(7), 0, 0);
+        box.addView(note);
 
         return box;
     }
@@ -4083,34 +4218,14 @@ public class MainActivity extends Activity {
         return row;
     }
 
-    private View healthCenteredStat(String label, String value) {
-        LinearLayout metric = healthMetric(label, value, Gravity.CENTER);
-        LinearLayout.LayoutParams params =
-                new LinearLayout.LayoutParams(
-                        ViewGroup.LayoutParams.MATCH_PARENT,
-                        ViewGroup.LayoutParams.WRAP_CONTENT);
-        params.topMargin = dp(3);
-        params.bottomMargin = dp(3);
-        metric.setLayoutParams(params);
-        return metric;
-    }
-
-    private View healthSingleStat(String label, String value) {
-        LinearLayout metric = healthMetric(label, value, Gravity.START);
-        LinearLayout.LayoutParams params =
-                new LinearLayout.LayoutParams(
-                        ViewGroup.LayoutParams.MATCH_PARENT,
-                        ViewGroup.LayoutParams.WRAP_CONTENT);
-        params.topMargin = dp(3);
-        metric.setLayoutParams(params);
-        return metric;
-    }
-
     private LinearLayout healthMetric(String label, String value, int gravity) {
         LinearLayout box = new LinearLayout(this);
         box.setOrientation(LinearLayout.VERTICAL);
         box.setGravity(gravity);
-        box.addView(text(label, 11, MUTED, false));
+        box.setPadding(dp(8), dp(6), dp(8), dp(6));
+        box.setBackground(roundRect(PANEL, 10, LINE, 1));
+
+        box.addView(text(label, 10, MUTED, false));
 
         TextView v = text(
                 value == null || value.isEmpty() ? "—" : value,
@@ -4120,6 +4235,59 @@ public class MainActivity extends Activity {
         v.setGravity(gravity);
         box.addView(v);
         return box;
+    }
+
+    private long heartbeatAgeSeconds(JSONObject data, String timestampField) {
+        if (data == null) return -1L;
+
+        if (data.has("age_seconds")) {
+            long age = data.optLong("age_seconds", -1L);
+            if (age >= 0L) return age;
+        }
+
+        String raw = data.optString(timestampField, "");
+        long millis = parseIsoMillis(raw);
+        if (millis <= 0L) return -1L;
+
+        return Math.max(
+                0L,
+                (System.currentTimeMillis() - millis) / 1000L);
+    }
+
+    private long parseIsoMillis(String value) {
+        if (value == null || value.trim().isEmpty()) return 0L;
+
+        try {
+            return Instant.parse(value.trim()).toEpochMilli();
+        } catch (Exception ignored) {}
+
+        try {
+            return java.time.OffsetDateTime
+                    .parse(value.trim())
+                    .toInstant()
+                    .toEpochMilli();
+        } catch (Exception ignored) {}
+
+        return 0L;
+    }
+
+    private String formatIsoLocal(String value) {
+        long millis = parseIsoMillis(value);
+        if (millis <= 0L) return value == null || value.isEmpty() ? "—" : value;
+        return formatLocalDateTime(millis / 1000L);
+    }
+
+    private String formatLocalDateTime(long epochSeconds) {
+        if (epochSeconds <= 0L) return "—";
+
+        java.text.DateFormat formatter =
+                java.text.DateFormat.getDateTimeInstance(
+                        java.text.DateFormat.MEDIUM,
+                        java.text.DateFormat.SHORT,
+                        Locale.getDefault());
+
+        return formatter.format(
+                new java.util.Date(epochSeconds * 1000L));
     }
 
     private String heartbeatAgeText(long seconds) {
@@ -4136,88 +4304,16 @@ public class MainActivity extends Activity {
     }
 
     private String durationText(long seconds) {
-        long s = Math.max(0, seconds);
-        long days = s / 86400;
-        s %= 86400;
-        long hours = s / 3600;
-        s %= 3600;
-        long minutes = s / 60;
-        if (days > 0) return days + "d " + hours + "h";
-        if (hours > 0) return hours + "h " + minutes + "m";
+        long remaining = Math.max(0L, seconds);
+        long days = remaining / 86400L;
+        remaining %= 86400L;
+        long hours = remaining / 3600L;
+        remaining %= 3600L;
+        long minutes = remaining / 60L;
+
+        if (days > 0L) return days + "d " + hours + "h";
+        if (hours > 0L) return hours + "h " + minutes + "m";
         return minutes + "m";
-    }
-
-    private View botHealthCard(String name, JSONObject d, boolean sharla) {
-        if (d == null) d = new JSONObject();
-
-        LinearLayout box = cardInner();
-        box.setPadding(dp(10), dp(9), dp(10), dp(9));
-
-        boolean online = d.optBoolean("online", false);
-
-        LinearLayout titleRow = new LinearLayout(this);
-        titleRow.setOrientation(LinearLayout.HORIZONTAL);
-        titleRow.setGravity(Gravity.CENTER_VERTICAL);
-
-        titleRow.addView(text("●", 17, online ? GREEN : RED, true));
-
-        TextView nameText = text(name, 15, TEXT, true);
-        LinearLayout.LayoutParams nameParams =
-                new LinearLayout.LayoutParams(
-                        0,
-                        ViewGroup.LayoutParams.WRAP_CONTENT,
-                        1f);
-        nameParams.leftMargin = dp(6);
-        titleRow.addView(nameText, nameParams);
-
-        box.addView(titleRow);
-
-        if (sharla) {
-            box.addView(text(
-                    "Gateway: " +
-                            (d.optBoolean("discord_ready", false)
-                                    ? "Ready"
-                                    : "Not ready"),
-                    11,
-                    MUTED,
-                    false));
-            box.addView(text(
-                    "Latency: " +
-                            (d.has("latency_ms")
-                                    ? d.optInt("latency_ms") + " ms"
-                                    : "—"),
-                    11,
-                    MUTED,
-                    false));
-            box.addView(text(
-                    "Servers: " + d.optInt("guild_count", 0),
-                    11,
-                    MUTED,
-                    false));
-            box.addView(text(
-                    "Members: " + d.optInt("member_count", 0),
-                    11,
-                    MUTED,
-                    false));
-        } else {
-            box.addView(text(
-                    "Service: " + d.optString("active_state", "unknown"),
-                    11,
-                    MUTED,
-                    false));
-            box.addView(text(
-                    "Process: " + d.optString("sub_state", "unknown"),
-                    11,
-                    MUTED,
-                    false));
-            box.addView(text(
-                    "PID: " + d.optString("pid", "—"),
-                    11,
-                    MUTED,
-                    false));
-        }
-
-        return box;
     }
 
     private View renderTalkPage() {
@@ -5695,11 +5791,17 @@ public class MainActivity extends Activity {
                 .getString(lastLootPreferenceKey(field), "");
     }
 
-    private void saveLastLootValue(String item, String rarity) {
+    private long loadLastLootTime() {
+        return getSharedPreferences("nerdhalla_loot", MODE_PRIVATE)
+                .getLong(lastLootPreferenceKey("time"), 0L);
+    }
+
+    private void saveLastLootValue(String item, String rarity, long claimedAt) {
         getSharedPreferences("nerdhalla_loot", MODE_PRIVATE)
                 .edit()
                 .putString(lastLootPreferenceKey("item"), item == null ? "" : item)
                 .putString(lastLootPreferenceKey("rarity"), rarity == null ? "" : rarity)
+                .putLong(lastLootPreferenceKey("time"), Math.max(0L, claimedAt))
                 .apply();
     }
 
