@@ -4098,7 +4098,7 @@ public class MainActivity extends Activity {
                     "Website state",
                     age < 0L ? "Unknown" : (fresh ? "Fresh" : "Expired")));
 
-            if (data.has("latency_ms") || data.has("guild_count")) {
+            if (data.has("latency_ms") || data.has("guild_count") || data.has("guilds")) {
                 box.addView(healthStatPair(
                         "Latency",
                         data.has("latency_ms")
@@ -4107,7 +4107,9 @@ public class MainActivity extends Activity {
                         "Servers",
                         data.has("guild_count")
                                 ? String.valueOf(data.optInt("guild_count", 0))
-                                : "—"));
+                                : (data.has("guilds")
+                                        ? String.valueOf(data.optInt("guilds", 0))
+                                        : "—")));
             }
         } else {
             long commandTotal = data.has("command_count")
