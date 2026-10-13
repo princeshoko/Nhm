@@ -29,11 +29,10 @@ jobs:
       - name: Install Android SDK 35
         run: /usr/local/lib/android/sdk/cmdline-tools/latest/bin/sdkmanager "platforms;android-35" "build-tools;35.0.0" "platform-tools"
 
-      - name: Add Nerdhalla launcher icon
+      - name: Verify bundled rainbow chalk NH logo
         run: |
-          mkdir -p app/src/main/res/drawable
-          curl -L --fail --retry 3             "https://nerdhalla.net/bot-icon.php?server=854996860224262144&v=nh-android"             -o app/src/main/res/drawable/nerdhalla_icon.png
-          file app/src/main/res/drawable/nerdhalla_icon.png
+          test -s app/src/main/res/drawable/nerdhalla_icon.webp
+          file app/src/main/res/drawable/nerdhalla_icon.webp
 
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
