@@ -19,6 +19,7 @@ ALLOWED_ORIGINS = {
 }
 CHUNK = 1024 * 1024
 RESERVE_BYTES = 1024 * 1024
+PRIVATE_WEB_ROOT = Path('/var/www/nerdhalla-drive/private')
 
 
 def load_tokens():
@@ -139,20 +140,8 @@ async def cors_middleware(request, handler):
     return response
 
 
-async def api_session(request):
-    auth = request.headers.get('Authorization', '')
-    token = auth[7:].strip() if auth.lower().startswith('bearer ') else ''
-    record = token_record(token)
-    if not record:
-        raise web.HTTPUnauthorized(text=json.dumps({'error': 'Invalid or expired Drive handoff.'}), content_type='application/json')
-
+def set_session_cookie(response, token, record):
     max_age = max(60, int(record.get('expires_at', 0)) - int(time.time()))
-    response = web.json_response({
-        'ok': True,
-        'username': record['username'],
-        'expires_in': max_age,
-        'private': True,
-    })
     response.set_cookie(
         COOKIE_NAME,
         token,
@@ -162,7 +151,55 @@ async def api_session(request):
         samesite='Lax',
         path='/',
     )
+    return max_age
+
+
+async def api_session(request):
+    auth = request.headers.get('Authorization', '')
+    token = auth[7:].strip() if auth.lower().startswith('bearer ') else ''
+    record = token_record(token)
+    if not record:
+        raise web.HTTPUnauthorized(text=json.dumps({'error': 'Invalid or expired Drive handoff.'}), content_type='application/json')
+
+    response = web.json_response({
+        'ok': True,
+        'username': record['username'],
+        'expires_in': max(60, int(record.get('expires_at', 0)) - int(time.time())),
+        'private': True,
+    })
+    set_session_cookie(response, token, record)
     return response
+
+
+async def private_page(request):
+    handoff = request.query.get('token', '').strip()
+    if handoff:
+        record = token_record(handoff)
+        if not record:
+            raise web.HTTPFound('https://nerdhalla.net/account.html#drive')
+        response = web.HTTPFound('/private/')
+        set_session_cookie(response, handoff, record)
+        return response
+
+    try:
+        session_record(request)
+    except web.HTTPUnauthorized:
+        raise web.HTTPFound('https://nerdhalla.net/account.html#drive')
+
+    index = PRIVATE_WEB_ROOT / 'index.html'
+    if not index.is_file():
+        raise web.HTTPServiceUnavailable(text='Private Drive interface is not installed.')
+    return web.FileResponse(index)
+
+
+async def private_asset(request):
+    name = request.match_info.get('name', '')
+    if name not in {'app.css', 'app.js'}:
+        raise web.HTTPNotFound()
+    target = PRIVATE_WEB_ROOT / name
+    if not target.is_file():
+        raise web.HTTPNotFound()
+    return web.FileResponse(target)
 
 
 async def api_list(request):
@@ -197,6 +234,7 @@ async def api_list(request):
     usage = shutil.disk_usage(root)
     return web.json_response({
         'ok': True,
+        'username': record['username'],
         'path': '' if clean_relative(rel).as_posix() == '.' else clean_relative(rel).as_posix(),
         'entries': entries,
         'usage': {
@@ -317,6 +355,9 @@ app = web.Application(
     client_max_size=11 * 1024 * 1024 * 1024,
 )
 app.router.add_route('OPTIONS', '/api/{tail:.*}', lambda request: web.Response(status=204))
+app.router.add_get('/private', private_page)
+app.router.add_get('/private/', private_page)
+app.router.add_get('/private/{name}', private_asset)
 app.router.add_post('/api/session', api_session)
 app.router.add_get('/api/list', api_list)
 app.router.add_post('/api/upload', api_upload)
