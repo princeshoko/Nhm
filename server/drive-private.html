@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="robots" content="noindex,nofollow,noarchive">
+  <title>Nerdhalla Private Drive</title>
+  <link rel="stylesheet" href="/private/app.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand-block">
+      <div class="brand">NERDHALLA</div>
+      <div class="tagline">PRIVATE DRIVE</div>
+    </div>
+    <div class="top-actions">
+      <span class="private-pill">🔒 Private</span>
+      <a href="https://nerdhalla.net/account.html#drive">My Nerdhalla</a>
+    </div>
+  </header>
+
+  <main class="shell">
+    <section class="drive-head">
+      <div>
+        <h1 id="drive-title">Private Drive</h1>
+        <div id="drive-path" class="pathline">/</div>
+      </div>
+      <div class="usage">
+        <span><small>Total</small><strong id="drive-total">—</strong></span>
+        <span><small>Used</small><strong id="drive-used">—</strong></span>
+        <span><small>Free</small><strong id="drive-free">—</strong></span>
+      </div>
+    </section>
+
+    <section class="toolbar">
+      <button id="upload-button" class="primary">Upload files</button>
+      <button id="folder-button">New folder</button>
+      <button id="up-button">Parent Directory</button>
+      <button id="refresh-button">Refresh</button>
+      <input id="file-input" type="file" multiple hidden>
+    </section>
+
+    <section id="drop-zone" class="drop-zone">
+      Drop files here to upload into this folder
+    </section>
+
+    <section id="progress-wrap" class="progress-wrap" hidden>
+      <div id="progress-text"></div>
+      <div class="progress-track"><span id="progress-bar"></span></div>
+    </section>
+
+    <div id="status" class="status">Loading private Drive…</div>
+
+    <section class="directory">
+      <div class="dir-header">
+        <div>Name</div>
+        <div>Last modified</div>
+        <div>Size</div>
+        <div></div>
+      </div>
+      <div id="directory-body"></div>
+    </section>
+
+    <p class="footnote">
+      Only the Discord account that owns this Drive can open this browser window.
+      FTP/FTPS and SFTP still work with your Drive username and password.
+    </p>
+  </main>
+
+  <script src="/private/app.js"></script>
+</body>
+</html>
