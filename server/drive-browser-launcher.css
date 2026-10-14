@@ -1,0 +1,7 @@
+/* ===== NERDHALLA PRIVATE DRIVE LAUNCHER V2 ===== */
+.nh-drive-launcher{margin:16px 0 0;padding:14px;border:1px solid rgba(255,255,255,.09);border-radius:14px;background:rgba(23,16,32,.88);display:flex;align-items:center;justify-content:space-between;gap:14px}
+.nh-drive-launcher-copy{min-width:0}.nh-drive-launcher-copy strong{display:block;color:#f5efff;font-size:15px}.nh-drive-launcher-copy span{display:block;color:#aaa0b7;font-size:12px;line-height:1.4;margin-top:3px}
+.nh-drive-launcher button{appearance:none;border:1px solid #9b6cff;background:#6d49c9;color:#fff;border-radius:10px;padding:10px 14px;font:inherit;font-size:13px;font-weight:800;cursor:pointer;white-space:nowrap}
+.nh-drive-launcher button:hover{filter:brightness(1.12)}.nh-drive-launcher-status{margin-top:8px;color:#aaa0b7;font-size:11px}.nh-drive-launcher-status.bad{color:#ff9da6}
+@media(max-width:650px){.nh-drive-launcher{align-items:stretch;flex-direction:column}.nh-drive-launcher button{width:100%}}
+/* ===== END NERDHALLA PRIVATE DRIVE LAUNCHER V2 ===== */
