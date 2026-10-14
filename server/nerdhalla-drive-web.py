@@ -231,13 +231,7 @@ async def private_logout(request):
     revoke_token(token)
 
     response = web.HTTPFound('https://nerdhalla.net/')
-    response.del_cookie(
-        COOKIE_NAME,
-        path='/',
-        secure=True,
-        httponly=True,
-        samesite='Lax',
-    )
+    response.del_cookie(COOKIE_NAME, path='/')
     return response
 
 
