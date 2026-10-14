@@ -826,7 +826,7 @@ public class MainActivity extends Activity {
             Button site = secondaryButton("Open Nerdhalla Drive");
             holder.addView(site, buttonParams());
             site.setOnClickListener(v ->
-                    openExternalUrl("https://drive.nerdhalla.net/"));
+                    openExternalUrl("https://nerdhalla.net/account.html#drive"));
 
             return;
         }
@@ -854,11 +854,7 @@ public class MainActivity extends Activity {
                         ? (used * 100.0 / total)
                         : 0.0);
 
-        String webUrl = drive.optString(
-                "web_url",
-                username.isEmpty()
-                        ? "https://drive.nerdhalla.net/"
-                        : "https://drive.nerdhalla.net/u/" + username + "/");
+        String webUrl = "https://nerdhalla.net/account.html#drive";
 
         String ftpHost = drive.optString(
                 "ftp_host",
