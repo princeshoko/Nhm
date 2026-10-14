@@ -90,7 +90,7 @@ button.primary{background:#6845bd;border-color:#8d61e8}
 }
 .dir-header,.dir-row{
   display:grid;
-  grid-template-columns:minmax(260px,1fr) 145px 78px 138px;
+  grid-template-columns:minmax(260px,1fr) 155px 120px 130px;
   align-items:center
 }
 .dir-header{
@@ -149,3 +149,5 @@ button.primary{background:#6845bd;border-color:#8d61e8}
   .meta.size:before{content:"Size: "}
   .actions{justify-content:flex-start;opacity:1}
 }
+
+.meta.size{text-align:right;padding-right:14px}
