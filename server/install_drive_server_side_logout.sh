@@ -140,5 +140,66 @@ echo "===== VERIFY PATCH ====="
 grep -n -A12 -B2 "$MARKER" "$LOGOUT" | head -35
 
 echo
+echo "===== FIX LOGOUT BUTTON NAVIGATION ====="
+NAV="$ROOT/discord-nav.js"
+if [ -f "$NAV" ]; then
+    cp -a "$NAV" "$NAV.before_drive_logout_nav_$STAMP"
+    if ! grep -Fq "NERDHALLA FORCE LOGOUT NAV V2" "$NAV"; then
+cat >> "$NAV" <<'JS'
+
+/* ===== NERDHALLA FORCE LOGOUT NAV V2 ===== */
+document.addEventListener('click', function(event) {
+    const link = event.target.closest && event.target.closest('#discord-login-nav');
+    if (!link) return;
+
+    const text = String(link.textContent || '').trim().toLowerCase();
+    const href = String(link.getAttribute('href') || '').toLowerCase();
+    const loggedIn =
+        link.classList.contains('discord-user') ||
+        href.includes('discord-logout.php') ||
+        (text !== '' && !text.includes('login with discord') && !text.includes('log in'));
+
+    if (!loggedIn) return;
+
+    event.preventDefault();
+    event.stopPropagation();
+    if (typeof event.stopImmediatePropagation === 'function') {
+        event.stopImmediatePropagation();
+    }
+    window.location.href = '/discord-logout.php';
+}, true);
+/* ===== END NERDHALLA FORCE LOGOUT NAV V2 ===== */
+JS
+        echo "Logout navigation V2 installed."
+    else
+        echo "Logout navigation V2 already present."
+    fi
+
+    for f in *.html; do
+        [ -f "$f" ] || continue
+        if grep -q 'discord-nav\\.js' "$f"; then
+            cp -a "$f" "$f.before_drive_logout_nav_cache_$STAMP"
+            php -r '
+                $f=$argv[1];
+                $s=file_get_contents($f);
+                $s=preg_replace(
+                    "~discord-nav\\\\.js(?:\\\\?v=[^\\\"'\\''[:space:]<>]+)?~",
+                    "discord-nav.js?v=20261014-drive-logout-2",
+                    $s
+                );
+                file_put_contents($f,$s);
+            ' "$f"
+        fi
+    done
+else
+    echo "WARNING: discord-nav.js not found; server-side token revoke is still installed."
+fi
+
+echo
+echo "===== VERIFY NAV ====="
+grep -n "NERDHALLA FORCE LOGOUT NAV V2" "$NAV" 2>/dev/null || true
+grep -n "discord-nav.js?v=20261014-drive-logout-2" account.html 2>/dev/null | head -3 || true
+
+echo
 echo "===== DONE ====="
 echo "Nerdhalla logout now revokes Drive browser tokens server-side before destroying the login session."
