@@ -70,8 +70,10 @@
 
   function render(data) {
     currentPath = data.path || '';
-    $('#drive-title').textContent = (data.username ? data.username + "'s " : '') + 'Private Drive';
-    $('#drive-path').textContent = '/' + currentPath;
+    const username = String(data.username || 'user');
+    const directoryPath = '/' + username + '/' + (currentPath ? currentPath + '/' : '');
+    $('#drive-title').textContent = 'Index of ' + directoryPath;
+    $('#drive-path').textContent = directoryPath;
     const usage = data.usage || {};
     $('#drive-total').textContent = humanBytes(usage.total_bytes);
     $('#drive-used').textContent = humanBytes(usage.used_bytes);
