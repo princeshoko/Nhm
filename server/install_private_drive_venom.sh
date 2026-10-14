@@ -8,6 +8,7 @@ PORTAL="$SHARLA/sharla_web_portal.py"
 MODULE="$SHARLA/nerdhalla_drive_browser.py"
 WEBBIN="/usr/local/sbin/nerdhalla-drive-web.py"
 SERVICE="/etc/systemd/system/nerdhalla-drive-web.service"
+PRIVATE_WEB="/var/www/nerdhalla-drive/private"
 RAW="https://raw.githubusercontent.com/princeshoko/Nhm/main/server"
 MARKER="# ===== NERDHALLA DRIVE PRIVATE BROWSER HOOK ====="
 
@@ -31,8 +32,14 @@ echo
 echo "===== DOWNLOAD PRIVATE DRIVE SERVICES ====="
 curl -fsSL "$RAW/nerdhalla_drive_browser.py" -o "$MODULE"
 curl -fsSL "$RAW/nerdhalla-drive-web.py" -o "$WEBBIN"
+mkdir -p "$PRIVATE_WEB"
+curl -fsSL "$RAW/drive-private.html" -o "$PRIVATE_WEB/index.html"
+curl -fsSL "$RAW/drive-private.css" -o "$PRIVATE_WEB/app.css"
+curl -fsSL "$RAW/drive-private.js" -o "$PRIVATE_WEB/app.js"
 chmod 600 "$MODULE"
 chmod 700 "$WEBBIN"
+chmod 755 "$PRIVATE_WEB"
+chmod 644 "$PRIVATE_WEB/index.html" "$PRIVATE_WEB/app.css" "$PRIVATE_WEB/app.js"
 python3 -m py_compile "$MODULE" "$WEBBIN" "$PORTAL"
 python3 -c 'import aiohttp; print("aiohttp OK:", aiohttp.__version__)'
 
@@ -93,6 +100,10 @@ block = r'''
     # NERDHALLA DRIVE PRIVATE BROWSER V1
     ProxyPreserveHost On
     ProxyTimeout 3600
+    ProxyPass /private/ http://127.0.0.1:5091/private/
+    ProxyPassReverse /private/ http://127.0.0.1:5091/private/
+    ProxyPass /private http://127.0.0.1:5091/private
+    ProxyPassReverse /private http://127.0.0.1:5091/private
     ProxyPass /api/ http://127.0.0.1:5091/api/
     ProxyPassReverse /api/ http://127.0.0.1:5091/api/
     RedirectMatch 302 ^/u(?:/.*)?$ https://nerdhalla.net/account.html#drive
@@ -112,6 +123,16 @@ for path in paths:
         else:
             lines.append(line)
     text = ''.join(lines)
+    if marker in text and 'ProxyPass /private/' not in text:
+        text = text.replace(
+            '    ProxyPreserveHost On\n',
+            '    ProxyPreserveHost On\n'
+            '    ProxyPass /private/ http://127.0.0.1:5091/private/\n'
+            '    ProxyPassReverse /private/ http://127.0.0.1:5091/private/\n'
+            '    ProxyPass /private http://127.0.0.1:5091/private\n'
+            '    ProxyPassReverse /private http://127.0.0.1:5091/private\n',
+            1,
+        )
     if marker not in text:
         idx = text.rfind('</VirtualHost>')
         if idx < 0:
@@ -138,6 +159,7 @@ echo "Sharla:            $(systemctl is-active sharla.service)"
 echo "Apache:            $(systemctl is-active httpd)"
 curl -sS -o /dev/null -w 'Drive root HTTP: %{http_code}\n' https://drive.nerdhalla.net/
 curl -sS -o /dev/null -w 'Private API without session HTTP: %{http_code}\n' https://drive.nerdhalla.net/api/list
+curl -sS -o /dev/null -w 'Private window without session HTTP: %{http_code}\n' https://drive.nerdhalla.net/private/
 curl -sS -I https://drive.nerdhalla.net/u/private-test/ | sed -n '1,8p'
 ss -ltnp | grep ':5091' || true
 
