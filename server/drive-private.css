@@ -12,20 +12,20 @@ body{min-height:100vh}
 
 .topbar{
   position:sticky;top:0;z-index:10;display:flex;align-items:center;
-  justify-content:space-between;gap:12px;padding:9px 14px;
+  justify-content:space-between;gap:12px;padding:7px 12px;
   background:rgba(11,8,17,.96);border-bottom:1px solid rgba(255,255,255,.07)
 }
 .brand{
-  font-weight:950;letter-spacing:.11em;font-size:28px;
+  font-weight:950;letter-spacing:.11em;font-size:22px;
   background:linear-gradient(90deg,#ff5f6d,#ff9f43,#ffd93d,#6bff95,#4dc9ff,#9b6cff,#ff6ec7);
   -webkit-background-clip:text;background-clip:text;color:transparent
 }
-.tagline{font-size:15px;color:var(--muted);letter-spacing:.16em;margin-top:0}
+.tagline{font-size:14px;color:var(--muted);letter-spacing:.16em;margin-top:0}
 .top-actions{display:flex;align-items:center;gap:8px}
-.top-actions a{color:#d8c9ff;text-decoration:none;font-weight:700;font-size:20px}
+.top-actions a{color:#d8c9ff;text-decoration:none;font-weight:700;font-size:13px}
 .private-pill{
-  padding:5px 8px;border-radius:999px;background:rgba(111,215,168,.08);
-  border:1px solid rgba(111,215,168,.24);color:#a2ebca;font-size:30px;font-weight:800
+  padding:3px 7px;border-radius:999px;background:rgba(111,215,168,.08);
+  border:1px solid rgba(111,215,168,.24);color:#a2ebca;font-size:14px;font-weight:800
 }
 
 .shell{width:min(1320px,calc(100% - 14px));margin:9px auto 24px}
@@ -34,42 +34,42 @@ body{min-height:100vh}
   display:flex;align-items:flex-end;justify-content:space-between;
   gap:14px;margin-bottom:6px;padding:0 2px
 }
-.drive-head h1{margin:0;font-size:30px;line-height:1.15}
+.drive-head h1{margin:0;font-size:22px;line-height:1.15}
 .pathline{
   margin-top:2px;color:var(--muted);
   font-family:ui-monospace,SFMono-Regular,Menlo,monospace;
-  font-size:20px;word-break:break-all
+  font-size:13px;word-break:break-all
 }
 .usage{display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end}
 .usage span{
   min-width:auto;padding:0;border:0;background:transparent;border-radius:0;
   display:flex;align-items:baseline;gap:4px
 }
-.usage small{display:inline;color:#776e82;font-size:16px;text-transform:uppercase;letter-spacing:.04em}
-.usage strong{display:inline;margin:0;font-size:20px;color:#dcd2e8}
+.usage small{display:inline;color:#776e82;font-size:11px;text-transform:uppercase;letter-spacing:.04em}
+.usage strong{display:inline;margin:0;font-size:13px;color:#dcd2e8}
 
 .toolbar{
-  display:flex;flex-wrap:wrap;gap:4px;padding:7px 8px;
+  display:flex;flex-wrap:wrap;gap:4px;padding:5px 6px;
   border:1px solid var(--line);background:#171020;border-radius:6px 6px 0 0
 }
 button{
   appearance:none;border:1px solid #47325d;background:#21172e;color:var(--text);
-  padding:6px 9px;border-radius:4px;font:inherit;font-size:20px;
+  padding:4px 7px;border-radius:4px;font:inherit;font-size:13px;
   font-weight:700;line-height:1.25;cursor:pointer
 }
 button:hover{filter:brightness(1.14)}
 button.primary{background:#6845bd;border-color:#8d61e8}
 
 .drop-zone{
-  padding:7px 9px;border-left:1px solid var(--line);
+  padding:5px 8px;border-left:1px solid var(--line);
   border-right:1px solid var(--line);border-bottom:1px solid var(--line);
-  color:#746a7f;font-size:30px;background:rgba(155,108,255,.025)
+  color:#746a7f;font-size:14px;background:rgba(155,108,255,.025)
 }
 .drop-zone.dragging{background:rgba(155,108,255,.11);color:var(--text);outline:1px dashed var(--purple);outline-offset:-3px}
 
 .progress-wrap{
   padding:5px 8px;border-left:1px solid var(--line);border-right:1px solid var(--line);
-  background:#171020;font-size:30px;color:#d8cdec
+  background:#171020;font-size:14px;color:#d8cdec
 }
 .progress-track{
   height:4px;background:#0f0a16;border:0;border-radius:999px;
@@ -81,7 +81,7 @@ button.primary{background:#6845bd;border-color:#8d61e8}
   transition:width .1s linear
 }
 
-.status{padding:3px 2px;color:#8fdab8;font-size:30px;min-height:17px}
+.status{padding:3px 2px;color:#8fdab8;font-size:14px;min-height:17px}
 .status.bad{color:#ff9da6}
 
 .directory{
@@ -95,14 +95,14 @@ button.primary{background:#6845bd;border-color:#8d61e8}
 }
 .dir-header{
   background:#1b1325;border-bottom:1px solid var(--line);
-  color:#8f859b;font-size:16px;font-weight:800;
+  color:#8f859b;font-size:11px;font-weight:800;
   text-transform:uppercase;letter-spacing:.045em
 }
-.dir-header>div{padding:6px 8px}
+.dir-header>div{padding:4px 7px}
 .dir-row>div{padding:3px 7px}
 .dir-row{
-  min-height:40px;border-bottom:1px solid rgba(255,255,255,.035);
-  font-size:20px;line-height:1.25
+  min-height:27px;border-bottom:1px solid rgba(255,255,255,.035);
+  font-size:13px;line-height:1.25
 }
 .dir-row:last-child{border-bottom:0}
 .dir-row:hover{background:rgba(155,108,255,.055)}
@@ -110,14 +110,14 @@ button.primary{background:#6845bd;border-color:#8d61e8}
 .name-cell{min-width:0;display:flex;align-items:center;gap:5px}
 .name-link{
   border:0;background:transparent;padding:0;color:#e9e2f2;text-decoration:none;
-  font-family:inherit;font-size:20px;font-weight:500;line-height:1.2;
+  font-family:inherit;font-size:13px;font-weight:500;line-height:1.2;
   cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;text-align:left
 }
 .name-link.folder{color:#c6b1ef;font-weight:650}
 .name-link:hover{text-decoration:underline;color:#fff}
-.icon{width:22px;text-align:center;flex:0 0 auto;font-size:21px}
+.icon{width:15px;text-align:center;flex:0 0 auto;font-size:14px}
 
-.meta{color:#8d8399;font-size:30px;white-space:nowrap}
+.meta{color:#8d8399;font-size:14px;white-space:nowrap}
 .actions{
   display:flex;justify-content:flex-end;gap:2px;flex-wrap:nowrap;
   opacity:.72;transition:opacity .12s ease
@@ -125,7 +125,7 @@ button.primary{background:#6845bd;border-color:#8d61e8}
 .dir-row:hover .actions{opacity:1}
 .mini{
   border:0;background:transparent;color:#bba8d8;border-radius:3px;
-  padding:3px 5px;font-family:inherit;font-size:16px;text-decoration:none;
+  padding:2px 4px;font-family:inherit;font-size:11px;text-decoration:none;
   font-weight:650;line-height:1.2;cursor:pointer
 }
 .mini:hover{background:#281b37;color:#fff;text-decoration:none}
@@ -133,8 +133,8 @@ button.primary{background:#6845bd;border-color:#8d61e8}
 .mini.danger:hover{background:rgba(112,43,51,.5);color:#ffb0b7}
 
 .parent-row .name-link{color:var(--gold);font-weight:650}
-.empty{padding:12px 8px;color:#817688;text-align:left;font-size:30px}
-.footnote{color:#5f5768;font-size:16px;line-height:1.35;margin:5px 2px 0}
+.empty{padding:12px 8px;color:#817688;text-align:left;font-size:14px}
+.footnote{color:#5f5768;font-size:11px;line-height:1.35;margin:5px 2px 0}
 
 @media(max-width:820px){
   .shell{width:calc(100% - 8px);margin-top:5px}
