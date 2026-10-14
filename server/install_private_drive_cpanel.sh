@@ -59,6 +59,47 @@ PHP
 php -l "$PORTAL"
 
 echo
+echo "===== CHAIN NERDHALLA LOGOUT THROUGH DRIVE LOGOUT ====="
+LOGOUT="$ROOT/discord-logout.php"
+if [ -f "$LOGOUT" ]; then
+    php <<'PHP'
+<?php
+$file = 'discord-logout.php';
+$s = file_get_contents($file);
+if ($s === false) {
+    fwrite(STDERR, "Could not read discord-logout.php\n");
+    exit(1);
+}
+$marker = 'NERDHALLA DRIVE LOGOUT CHAIN';
+if (strpos($s, $marker) === false) {
+    $needle = 'session_destroy();';
+    $count = substr_count($s, $needle);
+    if ($count !== 1) {
+        fwrite(STDERR, "Expected exactly one session_destroy(); but found $count.\n");
+        exit(1);
+    }
+    $replacement = <<<'CODE'
+session_destroy();
+
+/* NERDHALLA DRIVE LOGOUT CHAIN */
+header('Location: https://drive.nerdhalla.net/private/logout', true, 302);
+exit;
+/* END NERDHALLA DRIVE LOGOUT CHAIN */
+CODE;
+    $s = str_replace($needle, $replacement, $s);
+    file_put_contents($file, $s);
+    echo "Drive logout chain installed.\n";
+} else {
+    echo "Drive logout chain already installed.\n";
+}
+?>
+PHP
+    php -l "$LOGOUT"
+else
+    echo "WARNING: discord-logout.php not found."
+fi
+
+echo
 echo "===== DOWNLOAD PRIVATE DRIVE LAUNCHER ====="
 CSS_FILE="$(mktemp)"
 JS_FILE="$(mktemp)"
