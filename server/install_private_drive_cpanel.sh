@@ -59,13 +59,13 @@ PHP
 php -l "$PORTAL"
 
 echo
-echo "===== DOWNLOAD PRIVATE DRIVE UI ====="
+echo "===== DOWNLOAD PRIVATE DRIVE LAUNCHER ====="
 CSS_FILE="$(mktemp)"
 JS_FILE="$(mktemp)"
 PATCHER="$(mktemp)"
 trap 'rm -f "$CSS_FILE" "$JS_FILE" "$PATCHER"' EXIT
-curl -fsSL "$RAW/drive-browser-ui.css" -o "$CSS_FILE"
-curl -fsSL "$RAW/drive-browser-ui.js" -o "$JS_FILE"
+curl -fsSL "$RAW/drive-browser-launcher.css" -o "$CSS_FILE"
+curl -fsSL "$RAW/drive-browser-launcher.js" -o "$JS_FILE"
 
 cat > "$PATCHER" <<'PHP'
 <?php
@@ -79,24 +79,46 @@ if ($s === false || $css === false || $js === false) {
     fwrite(STDERR, "Could not read account/CSS/JS source.\n");
     exit(1);
 }
-if (strpos($s, 'NERDHALLA PRIVATE DRIVE BROWSER V1') === false) {
-    $pos = strripos($s, '</head>');
-    if ($pos === false) {
-        fwrite(STDERR, "account.html has no </head>.\n");
-        exit(1);
-    }
-    $s = substr($s, 0, $pos) . "\n<style>\n" . $css . "\n</style>\n" . substr($s, $pos);
+/* Remove the old embedded V1 browser manager if present. */
+$s = preg_replace(
+    '~<style>\s*/\* ===== NERDHALLA PRIVATE DRIVE BROWSER V1 ===== \*/.*?/\* ===== END NERDHALLA PRIVATE DRIVE BROWSER V1 ===== \*/\s*</style>\s*~s',
+    '',
+    $s
+);
+$s = preg_replace(
+    '~<script>\s*\(\(\) => \{\s*[\'"]use strict[\'"];\s*const DRIVE_API = [\'"]https://drive\.nerdhalla\.net/api[\'"];.*?</script>\s*~s',
+    '',
+    $s
+);
+
+/* Replace an older V2 launcher cleanly on re-run. */
+$s = preg_replace(
+    '~<style>\s*/\* ===== NERDHALLA PRIVATE DRIVE LAUNCHER V2 ===== \*/.*?/\* ===== END NERDHALLA PRIVATE DRIVE LAUNCHER V2 ===== \*/\s*</style>\s*~s',
+    '',
+    $s
+);
+$s = preg_replace(
+    '~<script>\s*/\* NERDHALLA PRIVATE DRIVE LAUNCHER V2 \*/.*?/\* END NERDHALLA PRIVATE DRIVE LAUNCHER V2 \*/\s*</script>\s*~s',
+    '',
+    $s
+);
+
+$pos = strripos($s, '</head>');
+if ($pos === false) {
+    fwrite(STDERR, "account.html has no </head>.\n");
+    exit(1);
 }
-if (strpos($s, 'Private browser files') === false) {
-    $pos = strripos($s, '</body>');
-    if ($pos === false) {
-        fwrite(STDERR, "account.html has no </body>.\n");
-        exit(1);
-    }
-    $s = substr($s, 0, $pos) . "\n<script>\n" . $js . "\n</script>\n" . substr($s, $pos);
+$s = substr($s, 0, $pos) . "\n<style>\n" . $css . "\n</style>\n" . substr($s, $pos);
+
+$pos = strripos($s, '</body>');
+if ($pos === false) {
+    fwrite(STDERR, "account.html has no </body>.\n");
+    exit(1);
 }
+$s = substr($s, 0, $pos) . "\n<script>\n" . $js . "\n</script>\n" . substr($s, $pos);
+
 file_put_contents($file, $s);
-echo "Private Drive browser manager installed.\n";
+echo "Private Drive new-window launcher installed.\n";
 ?>
 PHP
 php "$PATCHER" "$ACCOUNT" "$CSS_FILE" "$JS_FILE"
@@ -104,11 +126,16 @@ php "$PATCHER" "$ACCOUNT" "$CSS_FILE" "$JS_FILE"
 echo
 echo "===== VERIFY ====="
 grep -n "drive_browser_token" "$PORTAL"
-grep -n "NERDHALLA PRIVATE DRIVE BROWSER V1" "$ACCOUNT" | head -5
+grep -n "NERDHALLA PRIVATE DRIVE LAUNCHER V2" "$ACCOUNT" | head -5
+if grep -q "NERDHALLA PRIVATE DRIVE BROWSER V1" "$ACCOUNT"; then
+    echo "WARNING: old embedded Drive browser marker still present."
+else
+    echo "Old embedded browser removed."
+fi
 curl -sS -o /dev/null -w 'account.html HTTP: %{http_code}\n' https://nerdhalla.net/account.html
 curl -sS -o /dev/null -w 'Private API without browser session HTTP: %{http_code}\n' https://drive.nerdhalla.net/api/list
 curl -sS -I https://drive.nerdhalla.net/u/private-test/ | sed -n '1,8p'
 
 echo
 echo "===== DONE ====="
-echo "Open https://nerdhalla.net/account.html#drive while logged in with Discord."
+echo "Open My Nerdhalla -> Drive, then click Open Private Drive."
