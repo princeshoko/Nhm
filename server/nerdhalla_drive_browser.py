@@ -96,6 +96,32 @@ def _write_tokens(tokens):
     os.chmod(TOKENS_FILE, 0o600)
 
 
+def _revoke_user_tokens(user_id):
+    wanted = str(user_id)
+    removed = 0
+
+    STATE_ROOT.mkdir(parents=True, exist_ok=True)
+    with open(TOKENS_LOCK, 'a+', encoding='utf-8') as lock:
+        fcntl.flock(lock.fileno(), fcntl.LOCK_EX)
+        tokens = _load_json(TOKENS_FILE, {})
+        if not isinstance(tokens, dict):
+            tokens = {}
+
+        kept = {}
+        for key, value in tokens.items():
+            if not isinstance(value, dict):
+                continue
+            if str(value.get('discord_id') or '') == wanted:
+                removed += 1
+                continue
+            kept[key] = value
+
+        _write_tokens(kept)
+        fcntl.flock(lock.fileno(), fcntl.LOCK_UN)
+
+    return removed
+
+
 def _issue_token(user_id, username):
     now = int(time.time())
     expires = now + TOKEN_TTL
@@ -126,6 +152,16 @@ def _issue_token(user_id, username):
         fcntl.flock(lock.fileno(), fcntl.LOCK_UN)
 
     return token, expires
+
+
+async def portal_drive_browser_revoke(request):
+    authenticate = request.app['drive_browser_authenticate']
+    user_id = await authenticate(request)
+    removed = _revoke_user_tokens(user_id)
+    return web.json_response({
+        'ok': True,
+        'revoked': removed,
+    })
 
 
 async def portal_drive_browser_token(request):
@@ -167,7 +203,10 @@ async def portal_drive_browser_token(request):
 
 def install_drive_browser(bot, app, authenticate):
     app['drive_browser_authenticate'] = authenticate
-    path = '/portal/me/drive/browser-token'
+    token_path = '/portal/me/drive/browser-token'
+    revoke_path = '/portal/me/drive/browser-revoke'
     existing = {route.resource.canonical for route in app.router.routes()}
-    if path not in existing:
-        app.router.add_get(path, portal_drive_browser_token)
+    if token_path not in existing:
+        app.router.add_get(token_path, portal_drive_browser_token)
+    if revoke_path not in existing:
+        app.router.add_post(revoke_path, portal_drive_browser_revoke)
