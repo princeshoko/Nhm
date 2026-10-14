@@ -147,7 +147,8 @@ PYAPACHE
 echo
 echo "===== START / RELOAD ====="
 systemctl daemon-reload
-systemctl enable --now nerdhalla-drive-web.service
+systemctl enable nerdhalla-drive-web.service >/dev/null 2>&1 || true
+systemctl restart nerdhalla-drive-web.service
 systemctl restart sharla.service
 httpd -t
 systemctl reload httpd
