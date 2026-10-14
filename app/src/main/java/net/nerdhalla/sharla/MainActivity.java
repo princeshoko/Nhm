@@ -229,7 +229,7 @@ public class MainActivity extends Activity {
 
         if ("my".equals(currentTop)) {
             if (meData == null) return;
-            List<String> keys = list("profile", "shop", "homeworlds", "inventory", "achievements", "challenges");
+            List<String> keys = list("profile", "shop", "homeworlds", "inventory", "achievements", "challenges", "drive");
             int current = keys.indexOf(currentMySection);
             if (current < 0) current = 0;
             int next = Math.floorMod(current + direction, keys.size());
@@ -689,6 +689,9 @@ public class MainActivity extends Activity {
             case "challenges":
                 page = renderChallengesPage();
                 break;
+            case "drive":
+                page = renderDrivePage();
+                break;
             default:
                 page = renderProfilePage();
         }
@@ -709,7 +712,8 @@ public class MainActivity extends Activity {
                 {"homeworlds", "🌌 Homeworlds"},
                 {"inventory", "🎒 Inventory"},
                 {"achievements", "🏆 Achievements"},
-                {"challenges", "🎯 Challenges"}
+                {"challenges", "🎯 Challenges"},
+                {"drive", "💾 Drive"}
         };
         for (String[] tab : tabs) {
             TextView b = chip(tab[1], tab[0].equals(currentMySection));
@@ -725,6 +729,446 @@ public class MainActivity extends Activity {
         activeMenuScroller = scroller;
         focusSelectedMenuTab(scroller, row, currentMySection);
         return scroller;
+    }
+
+
+    private View renderDrivePage() {
+        LinearLayout c = scrollColumn();
+        c.addView(pageHeading(
+                "Nerdhalla Drive",
+                "Your 10 GB personal storage space."));
+
+        LinearLayout holder = card();
+        holder.addView(text("Loading Drive…", 13, MUTED, false));
+        c.addView(holder, cardParams());
+
+        loadDriveInto(holder);
+
+        return wrapScroll(c);
+    }
+
+    private void loadDriveInto(LinearLayout holder) {
+        if (holder == null) return;
+
+        showBusy(true);
+
+        io.execute(() -> {
+            try {
+                JSONObject status = api.api("drive");
+
+                main.post(() -> {
+                    showBusy(false);
+                    renderDriveStatus(holder, status);
+                });
+
+            } catch (Exception e) {
+                main.post(() -> {
+                    showBusy(false);
+
+                    holder.removeAllViews();
+                    holder.addView(sectionTitle("Drive unavailable"));
+                    holder.addView(text(
+                            e.getMessage() == null
+                                    ? "Could not load your Nerdhalla Drive."
+                                    : e.getMessage(),
+                            14,
+                            RED,
+                            false));
+
+                    Button retry = secondaryButton("Retry");
+                    holder.addView(retry, buttonParams());
+                    retry.setOnClickListener(v -> loadDriveInto(holder));
+                });
+            }
+        });
+    }
+
+    private void renderDriveStatus(LinearLayout holder, JSONObject status) {
+        holder.removeAllViews();
+
+        boolean eligible = status.optBoolean("eligible", false);
+        boolean hasDrive = status.optBoolean("has_drive", false);
+        String roleName = status.optString("role_name", "");
+
+        if (!eligible) {
+            holder.addView(sectionTitle("Drive"));
+            holder.addView(text(
+                    "Nerdhalla Drive is available to @poolnoodle and @og members.",
+                    14,
+                    MUTED,
+                    false));
+
+            Button refresh = secondaryButton("Refresh");
+            holder.addView(refresh, buttonParams());
+            refresh.setOnClickListener(v -> loadDriveInto(holder));
+            return;
+        }
+
+        if (!hasDrive) {
+            holder.addView(bigStat("10gb", "Personal storage space"));
+
+            String eligibleText = roleName.isEmpty()
+                    ? "You are eligible to create one Nerdhalla Drive."
+                    : "Eligible through @" + roleName + ".";
+
+            holder.addView(text(
+                    eligibleText +
+                            "\n\nCreate your Drive once, choose your username, " +
+                            "and your password will be shown one time.",
+                    14,
+                    MUTED,
+                    false));
+
+            Button create = primaryButton("Create Nerdhalla Drive");
+            holder.addView(create, buttonParams());
+            create.setOnClickListener(v -> promptCreateDrive(holder));
+
+            Button site = secondaryButton("Open Nerdhalla Drive");
+            holder.addView(site, buttonParams());
+            site.setOnClickListener(v ->
+                    openExternalUrl("https://drive.nerdhalla.net/"));
+
+            return;
+        }
+
+        JSONObject drive = status.optJSONObject("drive");
+        if (drive == null) drive = new JSONObject();
+
+        JSONObject usage = status.optJSONObject("usage");
+        if (usage == null) usage = new JSONObject();
+
+        String username = drive.optString("username", "");
+        int storageGb = drive.optInt("storage_gb", 10);
+
+        long total = usage.optLong(
+                "total_bytes",
+                (long) storageGb * 1024L * 1024L * 1024L);
+        long used = usage.optLong("used_bytes", 0L);
+        long free = usage.optLong(
+                "free_bytes",
+                Math.max(0L, total - used));
+
+        double percent = usage.optDouble(
+                "percent_used",
+                total > 0
+                        ? (used * 100.0 / total)
+                        : 0.0);
+
+        String webUrl = drive.optString(
+                "web_url",
+                username.isEmpty()
+                        ? "https://drive.nerdhalla.net/"
+                        : "https://drive.nerdhalla.net/u/" + username + "/");
+
+        String ftpHost = drive.optString(
+                "ftp_host",
+                "drive.nerdhalla.net");
+        int ftpPort = drive.optInt("ftp_port", 21);
+
+        String sftpHost = drive.optString(
+                "sftp_host",
+                "drive.nerdhalla.net");
+        int sftpPort = drive.optInt("sftp_port", 22);
+
+        boolean mounted = usage.optBoolean("mounted", true);
+
+        holder.addView(sectionTitle("Your Drive"));
+
+        LinearLayout identityRow = new LinearLayout(this);
+        identityRow.setOrientation(LinearLayout.HORIZONTAL);
+
+        LinearLayout webBox = cardInner();
+        webBox.addView(text("Web", 11, MUTED, true));
+        webBox.addView(text(
+                webUrl.replaceFirst("^https?://", ""),
+                13,
+                TEXT,
+                false));
+
+        LinearLayout userBox = cardInner();
+        userBox.addView(text("Username", 11, MUTED, true));
+        userBox.addView(text(
+                username.isEmpty() ? "—" : username,
+                13,
+                TEXT,
+                true));
+
+        LinearLayout.LayoutParams halfLeft =
+                new LinearLayout.LayoutParams(
+                        0,
+                        ViewGroup.LayoutParams.WRAP_CONTENT,
+                        1f);
+        halfLeft.rightMargin = dp(5);
+
+        LinearLayout.LayoutParams halfRight =
+                new LinearLayout.LayoutParams(
+                        0,
+                        ViewGroup.LayoutParams.WRAP_CONTENT,
+                        1f);
+        halfRight.leftMargin = dp(5);
+
+        identityRow.addView(webBox, halfLeft);
+        identityRow.addView(userBox, halfRight);
+        holder.addView(identityRow);
+
+        holder.addView(spacer(10));
+
+        LinearLayout storageRow = new LinearLayout(this);
+        storageRow.setOrientation(LinearLayout.HORIZONTAL);
+
+        LinearLayout totalBox = cardInner();
+        totalBox.addView(text("Total", 11, MUTED, true));
+        totalBox.addView(text(humanBytes(total), 14, TEXT, true));
+
+        LinearLayout usedBox = cardInner();
+        usedBox.addView(text("Used", 11, MUTED, true));
+        usedBox.addView(text(
+                humanBytes(used) + " (" + trim1(percent) + "%)",
+                14,
+                TEXT,
+                true));
+
+        LinearLayout freeBox = cardInner();
+        freeBox.addView(text("Free", 11, MUTED, true));
+        freeBox.addView(text(humanBytes(free), 14, TEXT, true));
+
+        LinearLayout.LayoutParams third1 =
+                new LinearLayout.LayoutParams(
+                        0,
+                        ViewGroup.LayoutParams.WRAP_CONTENT,
+                        1f);
+        third1.rightMargin = dp(4);
+
+        LinearLayout.LayoutParams third2 =
+                new LinearLayout.LayoutParams(
+                        0,
+                        ViewGroup.LayoutParams.WRAP_CONTENT,
+                        1f);
+        third2.leftMargin = dp(4);
+        third2.rightMargin = dp(4);
+
+        LinearLayout.LayoutParams third3 =
+                new LinearLayout.LayoutParams(
+                        0,
+                        ViewGroup.LayoutParams.WRAP_CONTENT,
+                        1f);
+        third3.leftMargin = dp(4);
+
+        storageRow.addView(totalBox, third1);
+        storageRow.addView(usedBox, third2);
+        storageRow.addView(freeBox, third3);
+        holder.addView(storageRow);
+
+        holder.addView(spacer(10));
+
+        LinearLayout protocolRow = new LinearLayout(this);
+        protocolRow.setOrientation(LinearLayout.HORIZONTAL);
+
+        LinearLayout ftpBox = cardInner();
+        ftpBox.addView(text("FTP", 11, MUTED, true));
+        ftpBox.addView(text(
+                ftpHost + ":" + ftpPort + "\nExplicit FTPS",
+                13,
+                TEXT,
+                false));
+
+        LinearLayout sftpBox = cardInner();
+        sftpBox.addView(text("SFTP", 11, MUTED, true));
+        sftpBox.addView(text(
+                sftpHost + ":" + sftpPort,
+                13,
+                TEXT,
+                false));
+
+        protocolRow.addView(ftpBox, halfLeft);
+        protocolRow.addView(sftpBox, halfRight);
+        holder.addView(protocolRow);
+
+        if (!mounted) {
+            holder.addView(spacer(10));
+            holder.addView(text(
+                    "Storage is not currently mounted. Try Refresh before using it.",
+                    13,
+                    RED,
+                    true));
+        }
+
+        Button open = primaryButton("Open Drive");
+        holder.addView(open, buttonParams());
+        String finalWebUrl = webUrl;
+        open.setOnClickListener(v -> openExternalUrl(finalWebUrl));
+
+        Button refresh = secondaryButton("Refresh Drive");
+        holder.addView(refresh, buttonParams());
+        refresh.setOnClickListener(v -> loadDriveInto(holder));
+
+        Button reset = secondaryButton("Reset FTP / SFTP Password");
+        holder.addView(reset, buttonParams());
+        reset.setOnClickListener(v ->
+                confirm(
+                        "Reset Drive password?",
+                        "Your current FTP / SFTP password will stop working immediately.",
+                        () -> post(
+                                "drive_reset",
+                                new JSONObject(),
+                                result -> showDrivePassword(
+                                        "New Drive password",
+                                        result))));
+
+        Button delete = dangerButton("Delete Drive");
+        holder.addView(delete, buttonParams());
+        String finalUsername = username;
+        delete.setOnClickListener(v ->
+                confirm(
+                        "Delete Nerdhalla Drive?",
+                        "This permanently deletes the Drive and every file in it. This cannot be undone.",
+                        () -> promptDeleteDrive(holder, finalUsername)));
+    }
+
+    private void promptCreateDrive(LinearLayout holder) {
+        EditText username = edit("drive username", false);
+        username.setInputType(
+                InputType.TYPE_CLASS_TEXT |
+                        InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS);
+
+        new AlertDialog.Builder(this)
+                .setTitle(rainbowNerdhalla("Create Nerdhalla Drive"))
+                .setMessage(
+                        "Choose a lowercase username. " +
+                        "It becomes your Drive URL and FTP / SFTP username.")
+                .setView(username)
+                .setNegativeButton("Cancel", null)
+                .setPositiveButton("Create", (dialog, which) -> {
+                    String value = username.getText()
+                            .toString()
+                            .trim()
+                            .toLowerCase(Locale.US);
+
+                    if (value.isEmpty()) {
+                        toast("Enter a Drive username.");
+                        return;
+                    }
+
+                    JSONObject body = new JSONObject();
+
+                    try {
+                        body.put("username", value);
+                    } catch (Exception ignored) {}
+
+                    post(
+                            "drive_create",
+                            body,
+                            result -> {
+                                showDrivePassword(
+                                        "Drive created",
+                                        result);
+                                loadDriveInto(holder);
+                            });
+                })
+                .show();
+    }
+
+    private void promptDeleteDrive(
+            LinearLayout holder,
+            String username) {
+
+        EditText confirmation = edit("Type DELETE", false);
+
+        new AlertDialog.Builder(this)
+                .setTitle(rainbowNerdhalla("Final Drive confirmation"))
+                .setMessage(
+                        "Type DELETE to permanently erase @" +
+                        username +
+                        " and every file stored in this Drive.")
+                .setView(confirmation)
+                .setNegativeButton("Cancel", null)
+                .setPositiveButton("Delete forever", (dialog, which) -> {
+                    if (!"DELETE".equals(
+                            confirmation.getText()
+                                    .toString()
+                                    .trim())) {
+                        toast("Drive deletion cancelled.");
+                        return;
+                    }
+
+                    JSONObject body = new JSONObject();
+
+                    try {
+                        body.put("username", username);
+                        body.put("confirm_delete", "DELETE");
+                    } catch (Exception ignored) {}
+
+                    post(
+                            "drive_delete",
+                            body,
+                            result -> {
+                                toast("Drive deleted.");
+                                loadDriveInto(holder);
+                            });
+                })
+                .show();
+    }
+
+    private void showDrivePassword(
+            String title,
+            JSONObject result) {
+
+        String password = result.optString("password", "");
+
+        JSONObject drive = result.optJSONObject("drive");
+        String username = drive == null
+                ? ""
+                : drive.optString("username", "");
+
+        LinearLayout box = new LinearLayout(this);
+        box.setOrientation(LinearLayout.VERTICAL);
+        box.setPadding(dp(22), dp(8), dp(22), 0);
+
+        if (!username.isEmpty()) {
+            box.addView(text(
+                    "Username\n" + username,
+                    14,
+                    TEXT,
+                    false));
+            box.addView(spacer(12));
+        }
+
+        TextView passwordView = text(
+                "Password\n" +
+                        (password.isEmpty()
+                                ? "Password was not returned."
+                                : password),
+                15,
+                password.isEmpty() ? RED : TEXT,
+                true);
+
+        passwordView.setTextIsSelectable(true);
+        box.addView(passwordView);
+
+        box.addView(spacer(12));
+        box.addView(text(
+                "Save this password now. Nerdhalla does not store a readable copy and it will not be shown again.",
+                13,
+                GOLD,
+                true));
+
+        new AlertDialog.Builder(this)
+                .setTitle(rainbowNerdhalla(title))
+                .setView(box)
+                .setPositiveButton("I saved it", null)
+                .show();
+    }
+
+    private void openExternalUrl(String url) {
+        try {
+            Intent browser = new Intent(
+                    Intent.ACTION_VIEW,
+                    Uri.parse(url));
+            browser.addCategory(Intent.CATEGORY_BROWSABLE);
+            startActivity(browser);
+        } catch (Exception e) {
+            toast("Could not open your browser.");
+        }
     }
 
     private View renderProfilePage() {
