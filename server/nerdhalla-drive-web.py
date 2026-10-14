@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+import fcntl
 import json
 import mimetypes
 import os
@@ -12,6 +13,7 @@ from aiohttp import web
 
 STATE_ROOT = Path('/mnt/storage/nerdhalla-drive')
 TOKENS_FILE = STATE_ROOT / 'browser_tokens.json'
+TOKENS_LOCK = STATE_ROOT / '.browser_tokens.lock'
 COOKIE_NAME = 'nhdrive'
 ALLOWED_ORIGINS = {
     'https://nerdhalla.net',
@@ -29,6 +31,28 @@ def load_tokens():
         return data if isinstance(data, dict) else {}
     except Exception:
         return {}
+
+
+def revoke_token(token):
+    if not token:
+        return
+
+    STATE_ROOT.mkdir(parents=True, exist_ok=True)
+    with open(TOKENS_LOCK, 'a+', encoding='utf-8') as lock:
+        fcntl.flock(lock.fileno(), fcntl.LOCK_EX)
+        tokens = load_tokens()
+        if token in tokens:
+            tokens.pop(token, None)
+            tmp = TOKENS_FILE.with_name(TOKENS_FILE.name + '.tmp.' + str(os.getpid()))
+            with open(tmp, 'w', encoding='utf-8') as fh:
+                json.dump(tokens, fh, indent=2, sort_keys=True)
+                fh.write('\n')
+                fh.flush()
+                os.fsync(fh.fileno())
+            os.chmod(tmp, 0o600)
+            os.replace(tmp, TOKENS_FILE)
+            os.chmod(TOKENS_FILE, 0o600)
+        fcntl.flock(lock.fileno(), fcntl.LOCK_UN)
 
 
 def token_record(token):
@@ -202,6 +226,21 @@ async def private_asset(request):
     return web.FileResponse(target)
 
 
+async def private_logout(request):
+    token = request.cookies.get(COOKIE_NAME, '')
+    revoke_token(token)
+
+    response = web.HTTPFound('https://nerdhalla.net/')
+    response.del_cookie(
+        COOKIE_NAME,
+        path='/',
+        secure=True,
+        httponly=True,
+        samesite='Lax',
+    )
+    return response
+
+
 async def api_list(request):
     _, record = session_record(request)
     root = drive_root(record)
@@ -357,6 +396,7 @@ app = web.Application(
 app.router.add_route('OPTIONS', '/api/{tail:.*}', lambda request: web.Response(status=204))
 app.router.add_get('/private', private_page)
 app.router.add_get('/private/', private_page)
+app.router.add_get('/private/logout', private_logout)
 app.router.add_get('/private/{name}', private_asset)
 app.router.add_post('/api/session', api_session)
 app.router.add_get('/api/list', api_list)
