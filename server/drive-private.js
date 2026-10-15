@@ -7,6 +7,8 @@
     'jpg','jpeg','png','gif','webp','bmp','ico','avif'
   ]);
   let currentPath = '';
+  let currentEntries = [];
+  let selectedPaths = new Set();
   let previewsEnabled = localStorage.getItem(PREVIEW_KEY) === '1';
 
   const $ = (sel) => document.querySelector(sel);
@@ -64,6 +66,26 @@
     $('#progress-bar').style.width = Math.max(0, Math.min(100, percent)) + '%';
   }
 
+  function updateSelectionControls() {
+    const selectedCount = selectedPaths.size;
+    const deleteButton = $('#delete-selected-button');
+    const selectAll = $('#select-all');
+    const selectableCount = currentEntries.length;
+
+    if (deleteButton) {
+      deleteButton.disabled = selectedCount === 0;
+      deleteButton.textContent = selectedCount > 0
+        ? 'Delete selected (' + selectedCount + ')'
+        : 'Delete selected';
+    }
+
+    if (selectAll) {
+      selectAll.disabled = selectableCount === 0;
+      selectAll.checked = selectableCount > 0 && selectedCount === selectableCount;
+      selectAll.indeterminate = selectedCount > 0 && selectedCount < selectableCount;
+    }
+  }
+
   async function json(response) {
     let body = {};
     try { body = await response.json(); } catch (_) {}
@@ -100,10 +122,12 @@
 
     const body = $('#directory-body');
     const rows = [];
+    selectedPaths.clear();
 
     if (currentPath) {
       rows.push(`
         <div class="dir-row parent-row">
+          <div class="select-cell"></div>
           <div class="name-cell">
             <span class="icon">↩</span>
             <button type="button" class="name-link folder" data-action="parent">Parent Directory</button>
@@ -115,6 +139,7 @@
     }
 
     const entries = Array.isArray(data.entries) ? data.entries : [];
+    currentEntries = entries;
     for (let i = 0; i < entries.length; i++) {
       const item = entries[i];
       const icon = item.is_dir ? '📁' : '📄';
@@ -125,6 +150,13 @@
         : '';
       rows.push(`
         <div class="dir-row ${showPreview ? 'has-preview' : ''}">
+          <div class="select-cell">
+            <input
+              class="select-box row-select"
+              type="checkbox"
+              data-select-index="${i}"
+              aria-label="Select ${esc(item.name)}">
+          </div>
           <div class="name-cell">
             <span class="icon">${icon}</span>
             ${preview}
@@ -135,7 +167,6 @@
           <div class="actions">
             ${item.is_dir ? '' : `<a class="mini" href="${API}/download?path=${encodeURIComponent(item.path)}">Download</a>`}
             <button type="button" class="mini" data-action="rename" data-index="${i}">Rename</button>
-            <button type="button" class="mini danger" data-action="delete" data-index="${i}">Delete</button>
           </div>
         </div>`);
     }
@@ -145,6 +176,24 @@
     } else {
       body.innerHTML = rows.join('');
     }
+
+    updateSelectionControls();
+
+    body.onchange = (event) => {
+      const checkbox = event.target.closest('.row-select');
+      if (!checkbox) return;
+
+      const item = entries[Number(checkbox.dataset.selectIndex)];
+      if (!item) return;
+
+      if (checkbox.checked) {
+        selectedPaths.add(item.path);
+      } else {
+        selectedPaths.delete(item.path);
+      }
+
+      updateSelectionControls();
+    };
 
     body.onclick = async (event) => {
       const target = event.target.closest('[data-action]');
@@ -191,22 +240,6 @@
         return;
       }
 
-      if (action === 'delete') {
-        const kind = item.is_dir ? 'folder and everything inside it' : 'file';
-        if (!confirm('Delete this ' + kind + '?\n\n' + item.name)) return;
-        try {
-          setStatus('Deleting…');
-          await json(await api('/delete', {
-            method:'POST',
-            headers:{'Content-Type':'application/json'},
-            body:JSON.stringify({path:item.path})
-          }));
-          await refresh();
-          setStatus('Deleted.');
-        } catch (err) {
-          setStatus(err.message || 'Delete failed.', true);
-        }
-      }
     };
   }
 
@@ -267,6 +300,70 @@
     await refresh();
     setStatus(queue.length === 1 ? 'Upload complete.' : queue.length + ' uploads complete.');
   }
+
+  $('#select-all').onchange = (event) => {
+    const checked = !!event.target.checked;
+    selectedPaths.clear();
+
+    document.querySelectorAll('#directory-body .row-select').forEach((box) => {
+      box.checked = checked;
+      const item = currentEntries[Number(box.dataset.selectIndex)];
+      if (checked && item) selectedPaths.add(item.path);
+    });
+
+    updateSelectionControls();
+  };
+
+  $('#delete-selected-button').onclick = async () => {
+    const selected = currentEntries.filter((item) => selectedPaths.has(item.path));
+    if (!selected.length) return;
+
+    const names = selected.map((item) => item.name);
+    const preview = names.slice(0, 8).join('\n');
+    const more = names.length > 8 ? '\n… and ' + (names.length - 8) + ' more' : '';
+    const message =
+      'Delete ' + selected.length + ' selected item' + (selected.length === 1 ? '' : 's') + '?\n\n' +
+      preview + more +
+      '\n\nFolders will be deleted with everything inside them.';
+
+    if (!confirm(message)) return;
+
+    let deleted = 0;
+    const failures = [];
+
+    for (const item of selected) {
+      try {
+        setStatus('Deleting ' + (deleted + 1) + ' of ' + selected.length + '…');
+        await json(await api('/delete', {
+          method:'POST',
+          headers:{'Content-Type':'application/json'},
+          body:JSON.stringify({path:item.path})
+        }));
+        deleted++;
+      } catch (err) {
+        failures.push(item.name + ': ' + (err.message || 'Delete failed.'));
+      }
+    }
+
+    try {
+      await refresh();
+    } catch (err) {
+      setStatus(err.message || 'Could not refresh after deleting.', true);
+      return;
+    }
+
+    if (failures.length) {
+      setStatus(
+        'Deleted ' + deleted + ' item' + (deleted === 1 ? '' : 's') +
+        '; ' + failures.length + ' failed.',
+        true
+      );
+    } else {
+      setStatus(
+        'Deleted ' + deleted + ' selected item' + (deleted === 1 ? '' : 's') + '.'
+      );
+    }
+  };
 
   $('#upload-button').onclick = () => $('#file-input').click();
   $('#file-input').onchange = async () => {
