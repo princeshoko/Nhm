@@ -23,6 +23,29 @@ CHUNK = 1024 * 1024
 RESERVE_BYTES = 1024 * 1024
 PRIVATE_WEB_ROOT = Path('/var/www/nerdhalla-drive/private')
 
+# Only inert/browser-safe formats are rendered inline on the authenticated
+# Drive origin. Active web content (HTML, SVG, JavaScript, etc.) remains
+# attachment-only so uploaded files cannot execute with the Drive session.
+INLINE_MIME_TYPES = {
+    'application/pdf',
+    'application/json',
+    'text/plain',
+    'text/csv',
+    'text/markdown',
+}
+INLINE_MIME_PREFIXES = (
+    'image/',
+    'audio/',
+    'video/',
+)
+BLOCKED_INLINE_MIME_TYPES = {
+    'image/svg+xml',
+    'text/html',
+    'application/xhtml+xml',
+    'application/javascript',
+    'text/javascript',
+}
+
 
 def load_tokens():
     try:
@@ -353,9 +376,26 @@ async def api_download(request):
 
     quoted = urllib.parse.quote(target.name)
     mime, _ = mimetypes.guess_type(target.name)
+    mime = mime or 'application/octet-stream'
+
+    wants_view = request.query.get('view', '') == '1'
+    inline_safe = (
+        mime not in BLOCKED_INLINE_MIME_TYPES
+        and (
+            mime in INLINE_MIME_TYPES
+            or any(mime.startswith(prefix) for prefix in INLINE_MIME_PREFIXES)
+        )
+    )
+
     response = web.FileResponse(target)
-    response.content_type = mime or 'application/octet-stream'
-    response.headers['Content-Disposition'] = "attachment; filename*=UTF-8''" + quoted
+    response.content_type = mime
+
+    if wants_view and inline_safe:
+        response.headers['Content-Disposition'] = "inline; filename*=UTF-8''" + quoted
+        response.headers['Content-Security-Policy'] = "sandbox; default-src 'none'"
+    else:
+        response.headers['Content-Disposition'] = "attachment; filename*=UTF-8''" + quoted
+
     return response
 
 
