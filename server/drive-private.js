@@ -142,10 +142,7 @@
           await refresh();
         } else {
           const viewUrl = API + '/download?view=1&path=' + encodeURIComponent(item.path);
-          const opened = window.open(viewUrl, '_blank', 'noopener');
-          if (!opened) {
-            location.href = viewUrl;
-          }
+          window.open(viewUrl, '_blank', 'noopener');
         }
         return;
       }
