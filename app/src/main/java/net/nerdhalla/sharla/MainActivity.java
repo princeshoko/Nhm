@@ -6255,7 +6255,16 @@ public class MainActivity extends Activity {
     }
 
     private String buildLabel() {
-        return "Build " + BuildConfig.VERSION_CODE;
+        try {
+            android.content.pm.PackageInfo info =
+                    getPackageManager().getPackageInfo(getPackageName(), 0);
+            long code = Build.VERSION.SDK_INT >= Build.VERSION_CODES.P
+                    ? info.getLongVersionCode()
+                    : info.versionCode;
+            return "Build " + code;
+        } catch (Exception ignored) {
+            return "Build";
+        }
     }
 
     private CharSequence rainbowAll(String value) {
