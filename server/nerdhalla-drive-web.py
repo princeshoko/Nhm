@@ -256,7 +256,7 @@ async def private_view(request):
 
     image_url = '/api/download?view=1&path=' + urllib.parse.quote(rel, safe='')
     title = html.escape(target.name, quote=True)
-    html = f"""<!doctype html>
+    page_html = f"""<!doctype html>
 <html lang="en">
 <head>
 <meta charset="utf-8">
@@ -301,7 +301,7 @@ body{{
 </div>
 </body>
 </html>"""
-    response = web.Response(text=html, content_type='text/html')
+    response = web.Response(text=page_html, content_type='text/html')
     response.headers['Content-Security-Policy'] = "default-src 'none'; img-src 'self'; style-src 'unsafe-inline'"
     return response
 
