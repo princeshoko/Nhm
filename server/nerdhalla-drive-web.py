@@ -231,8 +231,27 @@ async def private_logout(request):
     revoke_token(token)
 
     # Logout must begin on the Drive origin so the browser sends nhdrive.
-    # After revoking it, continue to Nerdhalla to destroy the main login session.
-    response = web.HTTPFound('https://nerdhalla.net/discord-logout.php?drive=done')
+    # Nerdhalla's logout endpoint only accepts POST, so submit a tiny
+    # auto-posting form instead of redirecting with GET.
+    html = """<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="robots" content="noindex,nofollow">
+<meta http-equiv="Cache-Control" content="no-store">
+<title>Logging out…</title>
+</head>
+<body>
+<form id="logout-form" method="post" action="https://nerdhalla.net/discord-logout.php">
+<input type="hidden" name="drive" value="done">
+</form>
+<script>document.getElementById('logout-form').submit();</script>
+<noscript>
+  <button form="logout-form" type="submit">Continue logout</button>
+</noscript>
+</body>
+</html>"""
+    response = web.Response(text=html, content_type='text/html')
     response.del_cookie(COOKIE_NAME, path='/')
     return response
 
