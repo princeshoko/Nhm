@@ -91,6 +91,7 @@ public class MainActivity extends Activity {
     private TextView adminNav;
     private LinearLayout bottomNav;
     private boolean adminButtonAllowed = false;
+    private boolean driveTabAllowed = false;
     private HorizontalScrollView activeMenuScroller;
     private float swipeDownX;
     private float swipeDownY;
@@ -229,7 +230,8 @@ public class MainActivity extends Activity {
 
         if ("my".equals(currentTop)) {
             if (meData == null) return;
-            List<String> keys = list("profile", "shop", "homeworlds", "inventory", "achievements", "challenges", "drive");
+            List<String> keys = list("profile", "shop", "homeworlds", "inventory", "achievements", "challenges");
+            if (driveTabAllowed) keys.add("drive");
             int current = keys.indexOf(currentMySection);
             if (current < 0) current = 0;
             int next = Math.floorMod(current + direction, keys.size());
@@ -406,6 +408,16 @@ public class MainActivity extends Activity {
         });
 
         root.addView(shell, match());
+
+        TextView build = text(buildLabel(), 12, TEXT, true);
+        build.setText(rainbowAll(buildLabel()));
+        build.setGravity(Gravity.CENTER);
+        FrameLayout.LayoutParams buildParams = new FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+                Gravity.BOTTOM | Gravity.CENTER_HORIZONTAL);
+        buildParams.bottomMargin = dp(14);
+        root.addView(build, buildParams);
     }
 
     private void showNativeApp() {
@@ -416,7 +428,7 @@ public class MainActivity extends Activity {
         nativeRoot.setBackgroundColor(BG);
 
         nativeRoot.addView(buildAppBar(), new LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, dp(72)));
+                ViewGroup.LayoutParams.MATCH_PARENT, dp(84)));
 
         busy = new ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal);
         busy.setIndeterminate(true);
@@ -436,6 +448,7 @@ public class MainActivity extends Activity {
 
         currentTop = "my";
         adminButtonAllowed = false;
+        driveTabAllowed = false;
         updateBottomNav();
         checkAdminButtonAccess();
         loadMySharla();
@@ -461,6 +474,10 @@ public class MainActivity extends Activity {
         labels.addView(text("NERDHALLA", 18, TEXT, true));
         titleText = text("My Sharla", 13, MUTED, false);
         labels.addView(titleText);
+
+        TextView build = text(buildLabel(), 10, TEXT, true);
+        build.setText(rainbowAll(buildLabel()));
+        labels.addView(build);
 
         bar.addView(labels, new LinearLayout.LayoutParams(0,
                 ViewGroup.LayoutParams.MATCH_PARENT, 1f));
@@ -646,8 +663,20 @@ public class MainActivity extends Activity {
         io.execute(() -> {
             try {
                 JSONObject d = api.api("me");
+                boolean canUseDrive = false;
+                try {
+                    JSONObject driveStatus = api.api("drive");
+                    canUseDrive = driveStatus.optBoolean("eligible", false);
+                } catch (Exception ignored) {
+                    canUseDrive = false;
+                }
+                final boolean allowDriveTab = canUseDrive;
                 main.post(() -> {
                     meData = d;
+                    driveTabAllowed = allowDriveTab;
+                    if (!driveTabAllowed && "drive".equals(currentMySection)) {
+                        currentMySection = "profile";
+                    }
                     meDataFetchedElapsed = SystemClock.elapsedRealtime();
                     showBusy(false);
                     renderMySharla();
@@ -662,6 +691,10 @@ public class MainActivity extends Activity {
     }
 
     private void renderMySharla() {
+        if (!driveTabAllowed && "drive".equals(currentMySection)) {
+            currentMySection = "profile";
+        }
+
         LinearLayout outer = new LinearLayout(this);
         outer.setOrientation(LinearLayout.VERTICAL);
         outer.setBackgroundColor(BG);
@@ -716,6 +749,7 @@ public class MainActivity extends Activity {
                 {"drive", "💾 Drive"}
         };
         for (String[] tab : tabs) {
+            if ("drive".equals(tab[0]) && !driveTabAllowed) continue;
             TextView b = chip(tab[1], tab[0].equals(currentMySection));
             b.setTag(tab[0]);
             b.setOnClickListener(v -> {
@@ -5977,6 +6011,7 @@ public class MainActivity extends Activity {
                 adminNav = null;
                 bottomNav = null;
                 adminButtonAllowed = false;
+                driveTabAllowed = false;
                 nativeRoot = null;
                 showLogin();
                 toast("Logged out of Nerdhalla.");
@@ -6217,6 +6252,47 @@ public class MainActivity extends Activity {
         t.setTextColor(color);
         if (bold) t.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
         return t;
+    }
+
+    private String buildLabel() {
+        return "Build " + BuildConfig.VERSION_CODE;
+    }
+
+    private CharSequence rainbowAll(String value) {
+        if (value == null || value.isEmpty()) return value == null ? "" : value;
+
+        SpannableString styled = new SpannableString(value);
+        int[] palette = {
+                Color.rgb(255, 95, 109),
+                Color.rgb(255, 159, 67),
+                Color.rgb(255, 217, 61),
+                Color.rgb(107, 255, 149),
+                Color.rgb(77, 201, 255),
+                Color.rgb(155, 108, 255),
+                Color.rgb(255, 110, 199)
+        };
+
+        int visibleCount = 0;
+        for (int i = 0; i < value.length(); i++) {
+            if (!Character.isWhitespace(value.charAt(i))) visibleCount++;
+        }
+        int visibleIndex = 0;
+        for (int i = 0; i < value.length(); i++) {
+            if (Character.isWhitespace(value.charAt(i))) continue;
+            float position = visibleCount <= 1
+                    ? 0f
+                    : (visibleIndex / (float) (visibleCount - 1)) * (palette.length - 1);
+            int left = Math.min(palette.length - 1, (int) Math.floor(position));
+            int right = Math.min(palette.length - 1, left + 1);
+            float amount = position - left;
+            styled.setSpan(
+                    new ForegroundColorSpan(blendColor(palette[left], palette[right], amount)),
+                    i,
+                    i + 1,
+                    Spannable.SPAN_EXCLUSIVE_EXCLUSIVE);
+            visibleIndex++;
+        }
+        return styled;
     }
 
     private CharSequence rainbowNerdhalla(String value) {
