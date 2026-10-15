@@ -239,6 +239,72 @@ async def private_page(request):
     return web.FileResponse(index)
 
 
+async def private_view(request):
+    _, record = session_record(request)
+    root = drive_root(record)
+    rel = request.query.get('path', '')
+    target = safe_target(root, rel, allow_root=False)
+
+    if not target.is_file():
+        raise web.HTTPNotFound(text='File not found.')
+
+    mime, _ = mimetypes.guess_type(target.name)
+    mime = mime or 'application/octet-stream'
+    if not mime.startswith('image/') or mime in BLOCKED_INLINE_MIME_TYPES:
+        raise web.HTTPFound('/api/download?view=1&path=' + urllib.parse.quote(rel, safe=''))
+
+    image_url = '/api/download?view=1&path=' + urllib.parse.quote(rel, safe='')
+    title = target.name.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
+    html = f"""<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,minimum-scale=0.25,maximum-scale=8,user-scalable=yes,viewport-fit=cover">
+<meta name="robots" content="noindex,nofollow,noarchive">
+<meta http-equiv="Cache-Control" content="no-store">
+<title>{title}</title>
+<style>
+html,body{{
+  margin:0;
+  width:100%;
+  min-height:100%;
+  background:#08060d;
+}}
+body{{
+  overflow:auto;
+  touch-action:pan-x pan-y pinch-zoom;
+}}
+.viewer{{
+  width:100vw;
+  height:100vh;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  overflow:visible;
+}}
+.viewer img{{
+  display:block;
+  width:auto;
+  height:auto;
+  max-width:100vw;
+  max-height:100vh;
+  object-fit:contain;
+  user-select:none;
+  -webkit-user-drag:none;
+}}
+</style>
+</head>
+<body>
+<div class="viewer">
+<img src="{image_url}" alt="{title}">
+</div>
+</body>
+</html>"""
+    response = web.Response(text=html, content_type='text/html')
+    response.headers['Content-Security-Policy'] = "default-src 'none'; img-src 'self'; style-src 'unsafe-inline'"
+    return response
+
+
 async def private_asset(request):
     name = request.match_info.get('name', '')
     if name not in {'app.css', 'app.js'}:
@@ -452,6 +518,7 @@ app.router.add_route('OPTIONS', '/api/{tail:.*}', lambda request: web.Response(s
 app.router.add_get('/private', private_page)
 app.router.add_get('/private/', private_page)
 app.router.add_get('/private/logout', private_logout)
+app.router.add_get('/private/view', private_view)
 app.router.add_get('/private/{name}', private_asset)
 app.router.add_post('/api/session', api_session)
 app.router.add_get('/api/list', api_list)
