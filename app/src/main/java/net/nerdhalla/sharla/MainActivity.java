@@ -881,10 +881,26 @@ public class MainActivity extends Activity {
                 String scheme = uri.getScheme() == null ? "" : uri.getScheme();
                 String host = uri.getHost() == null ? "" : uri.getHost();
 
-                if ("https".equalsIgnoreCase(scheme) &&
-                        ("nerdhalla.net".equalsIgnoreCase(host) ||
+                boolean nerdhallaHost =
+                        "nerdhalla.net".equalsIgnoreCase(host) ||
                                 "www.nerdhalla.net".equalsIgnoreCase(host) ||
-                                host.toLowerCase(Locale.US).endsWith(".nerdhalla.net"))) {
+                                host.toLowerCase(Locale.US).endsWith(".nerdhalla.net");
+
+                String path = uri.getPath() == null ? "" : uri.getPath();
+                if (nerdhallaHost &&
+                        ("/webmail.html".equalsIgnoreCase(path) ||
+                                "webmail.html".equalsIgnoreCase(path))) {
+                    try {
+                        Intent browser = new Intent(Intent.ACTION_VIEW, uri);
+                        browser.addCategory(Intent.CATEGORY_BROWSABLE);
+                        startActivity(browser);
+                    } catch (Exception e) {
+                        toast("Could not open Webmail in your browser.");
+                    }
+                    return true;
+                }
+
+                if ("https".equalsIgnoreCase(scheme) && nerdhallaHost) {
                     return false;
                 }
 
@@ -948,7 +964,7 @@ public class MainActivity extends Activity {
             if (webmailWebView != null) webmailWebView.reload();
         });
 
-        web.loadUrl(BASE + "webmail.html");
+        web.loadUrl(BASE + "email.html");
         return page;
     }
 
