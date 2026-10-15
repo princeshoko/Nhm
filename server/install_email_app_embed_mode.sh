@@ -4,7 +4,7 @@ set -Eeuo pipefail
 ROOT="/home/purplepe/nerdhalla.net"
 STAMP="$(date +%Y%m%d_%H%M%S)"
 
-cd "$ROOT" || return
+cd "$ROOT" || exit 1
 
 for FILE in email.html webmail.html; do
     if [ ! -f "$FILE" ]; then
