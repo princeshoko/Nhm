@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <meta name="robots" content="noindex,nofollow,noarchive">
   <title>Nerdhalla Private Drive</title>
-  <link rel="stylesheet" href="/private/app.css">
+  <link rel="stylesheet" href="/private/app.css?v=20261015-multiselect1">
 </head>
 <body>
   <header class="topbar">
@@ -38,6 +38,7 @@
       <button id="up-button">Parent Directory</button>
       <button id="refresh-button">Refresh</button>
       <button id="preview-button" type="button" aria-pressed="false">Previews: Off</button>
+      <button id="delete-selected-button" type="button" class="danger" disabled>Delete selected</button>
       <input id="file-input" type="file" multiple hidden>
     </section>
 
@@ -54,6 +55,9 @@
 
     <section class="directory">
       <div class="dir-header">
+        <div class="select-cell">
+          <input id="select-all" class="select-box" type="checkbox" aria-label="Select all items">
+        </div>
         <div>Name</div>
         <div>Last modified</div>
         <div>Size</div>
@@ -68,6 +72,6 @@
     </p>
   </main>
 
-  <script src="/private/app.js"></script>
+  <script src="/private/app.js?v=20261015-multiselect1"></script>
 </body>
 </html>
