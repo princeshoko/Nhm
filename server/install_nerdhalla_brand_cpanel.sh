@@ -61,6 +61,7 @@ chmod 644 "$ASSET"
 echo
 echo "===== UPDATE WEBSITE BRAND REFERENCES ====="
 if [ -s "$LIST" ]; then
+    export NH_BRAND_LIST="$LIST"
     php <<'PHP'
 <?php
 $root = '/home/purplepe/nerdhalla.net';
