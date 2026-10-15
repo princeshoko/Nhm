@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import fcntl
+import html
 import json
 import mimetypes
 import os
@@ -254,7 +255,7 @@ async def private_view(request):
         raise web.HTTPFound('/api/download?view=1&path=' + urllib.parse.quote(rel, safe=''))
 
     image_url = '/api/download?view=1&path=' + urllib.parse.quote(rel, safe='')
-    title = target.name.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
+    title = html.escape(target.name, quote=True)
     html = f"""<!doctype html>
 <html lang="en">
 <head>
