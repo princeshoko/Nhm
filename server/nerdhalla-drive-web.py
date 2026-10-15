@@ -230,7 +230,9 @@ async def private_logout(request):
     token = request.cookies.get(COOKIE_NAME, '')
     revoke_token(token)
 
-    response = web.HTTPFound('https://nerdhalla.net/')
+    # Logout must begin on the Drive origin so the browser sends nhdrive.
+    # After revoking it, continue to Nerdhalla to destroy the main login session.
+    response = web.HTTPFound('https://nerdhalla.net/discord-logout.php?drive=done')
     response.del_cookie(COOKIE_NAME, path='/')
     return response
 
