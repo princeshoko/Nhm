@@ -73,6 +73,7 @@ public class MainActivity extends Activity {
     private static final String BASE = "https://nerdhalla.net/";
     private static final String MOBILE_LOGIN = BASE + "mobile-login.php";
     private static final int DRIVE_FILE_CHOOSER_REQUEST = 4107;
+    private static final int WEBMAIL_FILE_CHOOSER_REQUEST = 4108;
 
     private static final int BG = Color.rgb(11, 8, 17);
     private static final int BG2 = Color.rgb(18, 12, 28);
@@ -100,9 +101,12 @@ public class MainActivity extends Activity {
     private LinearLayout bottomNav;
     private boolean adminButtonAllowed = false;
     private boolean driveTabAllowed = false;
+    private boolean webmailTabAllowed = false;
     private boolean driveBrowserOpen = false;
     private WebView driveWebView;
     private ValueCallback<Uri[]> driveFileChooserCallback;
+    private WebView webmailWebView;
+    private ValueCallback<Uri[]> webmailFileChooserCallback;
     private HorizontalScrollView activeMenuScroller;
     private float swipeDownX;
     private float swipeDownY;
@@ -199,7 +203,8 @@ public class MainActivity extends Activity {
 
     @Override
     public boolean dispatchTouchEvent(MotionEvent event) {
-        if (event != null && nativeRoot != null && nativeRoot.getParent() != null && !driveBrowserOpen) {
+        if (event != null && nativeRoot != null && nativeRoot.getParent() != null &&
+                !driveBrowserOpen && webmailWebView == null) {
             switch (event.getActionMasked()) {
                 case MotionEvent.ACTION_DOWN:
                     swipeDownX = event.getRawX();
@@ -243,6 +248,7 @@ public class MainActivity extends Activity {
             if (meData == null) return;
             List<String> keys = list("profile", "shop", "homeworlds", "inventory", "achievements", "challenges");
             if (driveTabAllowed) keys.add("drive");
+            if (webmailTabAllowed) keys.add("webmail");
             int current = keys.indexOf(currentMySection);
             if (current < 0) current = 0;
             int next = Math.floorMod(current + direction, keys.size());
@@ -460,6 +466,7 @@ public class MainActivity extends Activity {
         currentTop = "my";
         adminButtonAllowed = false;
         driveTabAllowed = false;
+        webmailTabAllowed = false;
         updateBottomNav();
         checkAdminButtonAccess();
         loadMySharla();
@@ -544,6 +551,7 @@ public class MainActivity extends Activity {
 
         myNav.setOnClickListener(v -> {
             disposeDriveWebView();
+            disposeWebmailWebView();
             pendingMenuTransitionDirection = 0;
             currentTop = "my";
             titleText.setText("My Sharla");
@@ -554,6 +562,7 @@ public class MainActivity extends Activity {
         adminNav.setOnClickListener(v -> {
             if (!adminButtonAllowed) return;
             disposeDriveWebView();
+            disposeWebmailWebView();
             pendingMenuTransitionDirection = 0;
             currentTop = "admin";
             titleText.setText("Sharla Admin");
@@ -683,11 +692,25 @@ public class MainActivity extends Activity {
                 } catch (Exception ignored) {
                     canUseDrive = false;
                 }
+
+                boolean canUseWebmail = false;
+                try {
+                    JSONObject emailStatus = api.api("email_eligibility");
+                    canUseWebmail = emailStatus.optBoolean("eligible", false);
+                } catch (Exception ignored) {
+                    canUseWebmail = false;
+                }
+
                 final boolean allowDriveTab = canUseDrive;
+                final boolean allowWebmailTab = canUseWebmail;
                 main.post(() -> {
                     meData = d;
                     driveTabAllowed = allowDriveTab;
+                    webmailTabAllowed = allowWebmailTab;
                     if (!driveTabAllowed && "drive".equals(currentMySection)) {
+                        currentMySection = "profile";
+                    }
+                    if (!webmailTabAllowed && "webmail".equals(currentMySection)) {
                         currentMySection = "profile";
                     }
                     meDataFetchedElapsed = SystemClock.elapsedRealtime();
@@ -707,6 +730,11 @@ public class MainActivity extends Activity {
         if (!driveTabAllowed && "drive".equals(currentMySection)) {
             currentMySection = "profile";
         }
+        if (!webmailTabAllowed && "webmail".equals(currentMySection)) {
+            currentMySection = "profile";
+        }
+
+        disposeWebmailWebView();
 
         LinearLayout outer = new LinearLayout(this);
         outer.setOrientation(LinearLayout.VERTICAL);
@@ -738,6 +766,9 @@ public class MainActivity extends Activity {
             case "drive":
                 page = renderDrivePage();
                 break;
+            case "webmail":
+                page = renderWebmailPage();
+                break;
             default:
                 page = renderProfilePage();
         }
@@ -759,10 +790,12 @@ public class MainActivity extends Activity {
                 {"inventory", "🎒 Inventory"},
                 {"achievements", "🏆 Achievements"},
                 {"challenges", "🎯 Challenges"},
-                {"drive", "💾 Drive"}
+                {"drive", "💾 Drive"},
+                {"webmail", "📫 Webmail"}
         };
         for (String[] tab : tabs) {
             if ("drive".equals(tab[0]) && !driveTabAllowed) continue;
+            if ("webmail".equals(tab[0]) && !webmailTabAllowed) continue;
             TextView b = chip(tab[1], tab[0].equals(currentMySection));
             b.setTag(tab[0]);
             b.setOnClickListener(v -> {
@@ -778,6 +811,205 @@ public class MainActivity extends Activity {
         return scroller;
     }
 
+
+    private View renderWebmailPage() {
+        if (!webmailTabAllowed) {
+            LinearLayout c = scrollColumn();
+            c.addView(pageHeading(
+                    "Nerdhalla Webmail",
+                    "Webmail is not available for this account."));
+            return wrapScroll(c);
+        }
+
+        LinearLayout page = new LinearLayout(this);
+        page.setOrientation(LinearLayout.VERTICAL);
+        page.setBackgroundColor(BG);
+
+        LinearLayout bar = new LinearLayout(this);
+        bar.setOrientation(LinearLayout.HORIZONTAL);
+        bar.setGravity(Gravity.CENTER_VERTICAL);
+        bar.setPadding(dp(10), dp(7), dp(10), dp(7));
+        bar.setBackgroundColor(PANEL);
+
+        Button back = secondaryButton("←");
+        bar.addView(back, new LinearLayout.LayoutParams(dp(48), dp(42)));
+
+        TextView title = text("Nerdhalla Webmail", 15, TEXT, true);
+        title.setGravity(Gravity.CENTER_VERTICAL);
+        LinearLayout.LayoutParams titleParams =
+                new LinearLayout.LayoutParams(0, dp(42), 1f);
+        titleParams.leftMargin = dp(10);
+        bar.addView(title, titleParams);
+
+        Button reload = secondaryButton("↻");
+        bar.addView(reload, new LinearLayout.LayoutParams(dp(48), dp(42)));
+
+        page.addView(bar, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT));
+
+        WebView web = new WebView(this);
+        webmailWebView = web;
+        web.setBackgroundColor(BG);
+
+        WebSettings settings = web.getSettings();
+        settings.setJavaScriptEnabled(true);
+        settings.setDomStorageEnabled(true);
+        settings.setJavaScriptCanOpenWindowsAutomatically(true);
+        settings.setSupportMultipleWindows(false);
+        settings.setAllowFileAccess(false);
+        settings.setAllowContentAccess(true);
+        settings.setSupportZoom(true);
+        settings.setBuiltInZoomControls(true);
+        settings.setDisplayZoomControls(false);
+        settings.setUseWideViewPort(true);
+        settings.setLoadWithOverviewMode(true);
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+            settings.setMixedContentMode(WebSettings.MIXED_CONTENT_NEVER_ALLOW);
+        }
+
+        CookieManager cookies = CookieManager.getInstance();
+        cookies.setAcceptCookie(true);
+        cookies.setAcceptThirdPartyCookies(web, true);
+
+        web.setWebViewClient(new WebViewClient() {
+            @Override
+            public boolean shouldOverrideUrlLoading(
+                    WebView view,
+                    WebResourceRequest request) {
+                Uri uri = request.getUrl();
+                String scheme = uri.getScheme() == null ? "" : uri.getScheme();
+                String host = uri.getHost() == null ? "" : uri.getHost();
+
+                if ("https".equalsIgnoreCase(scheme) &&
+                        ("nerdhalla.net".equalsIgnoreCase(host) ||
+                                "www.nerdhalla.net".equalsIgnoreCase(host) ||
+                                host.toLowerCase(Locale.US).endsWith(".nerdhalla.net"))) {
+                    return false;
+                }
+
+                if ("http".equalsIgnoreCase(scheme) &&
+                        ("nerdhalla.net".equalsIgnoreCase(host) ||
+                                "www.nerdhalla.net".equalsIgnoreCase(host))) {
+                    return false;
+                }
+
+                try {
+                    Intent external = new Intent(Intent.ACTION_VIEW, uri);
+                    external.addCategory(Intent.CATEGORY_BROWSABLE);
+                    startActivity(external);
+                } catch (Exception ignored) {}
+                return true;
+            }
+        });
+
+        web.setWebChromeClient(new WebChromeClient() {
+            @Override
+            public boolean onShowFileChooser(
+                    WebView webView,
+                    ValueCallback<Uri[]> filePathCallback,
+                    FileChooserParams fileChooserParams) {
+
+                if (webmailFileChooserCallback != null) {
+                    webmailFileChooserCallback.onReceiveValue(null);
+                }
+                webmailFileChooserCallback = filePathCallback;
+
+                try {
+                    Intent intent = fileChooserParams.createIntent();
+                    startActivityForResult(intent, WEBMAIL_FILE_CHOOSER_REQUEST);
+                    return true;
+                } catch (Exception e) {
+                    webmailFileChooserCallback = null;
+                    toast("Could not open Android's file picker.");
+                    return false;
+                }
+            }
+        });
+
+        web.setDownloadListener((downloadUrl, userAgent, contentDisposition, mimeType, contentLength) ->
+                startWebmailDownload(downloadUrl, userAgent, contentDisposition, mimeType));
+
+        page.addView(web, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                0,
+                1f));
+
+        back.setOnClickListener(v -> {
+            if (webmailWebView != null && webmailWebView.canGoBack()) {
+                webmailWebView.goBack();
+            } else {
+                currentMySection = "profile";
+                renderMySharla();
+            }
+        });
+
+        reload.setOnClickListener(v -> {
+            if (webmailWebView != null) webmailWebView.reload();
+        });
+
+        web.loadUrl(BASE + "webmail.html");
+        return page;
+    }
+
+    private void startWebmailDownload(
+            String url,
+            String userAgent,
+            String contentDisposition,
+            String mimeType) {
+        try {
+            Uri uri = Uri.parse(url);
+            DownloadManager.Request request = new DownloadManager.Request(uri);
+            String fileName = URLUtil.guessFileName(url, contentDisposition, mimeType);
+            request.setTitle(fileName);
+            request.setDescription("Nerdhalla Webmail download");
+            request.setNotificationVisibility(
+                    DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED);
+
+            String cookie = CookieManager.getInstance().getCookie(url);
+            if (cookie != null && !cookie.isEmpty()) {
+                request.addRequestHeader("Cookie", cookie);
+            }
+            if (userAgent != null && !userAgent.isEmpty()) {
+                request.addRequestHeader("User-Agent", userAgent);
+            }
+            if (mimeType != null && !mimeType.isEmpty()) {
+                request.setMimeType(mimeType);
+            }
+
+            request.setDestinationInExternalPublicDir(
+                    Environment.DIRECTORY_DOWNLOADS,
+                    fileName.replaceAll("[^A-Za-z0-9._ -]", "_"));
+
+            DownloadManager manager =
+                    (DownloadManager) getSystemService(DOWNLOAD_SERVICE);
+            if (manager == null) {
+                throw new Exception("Android Download Manager is unavailable.");
+            }
+            manager.enqueue(request);
+            toast("Webmail download started.");
+        } catch (Exception e) {
+            toast("Could not start Webmail download: " + e.getMessage());
+        }
+    }
+
+    private void disposeWebmailWebView() {
+        if (webmailFileChooserCallback != null) {
+            webmailFileChooserCallback.onReceiveValue(null);
+            webmailFileChooserCallback = null;
+        }
+
+        if (webmailWebView != null) {
+            try {
+                webmailWebView.stopLoading();
+                webmailWebView.loadUrl("about:blank");
+                webmailWebView.setWebChromeClient(null);
+                webmailWebView.setWebViewClient(null);
+                webmailWebView.destroy();
+            } catch (Exception ignored) {}
+            webmailWebView = null;
+        }
+    }
 
     private View renderDrivePage() {
         LinearLayout c = scrollColumn();
@@ -1310,6 +1542,17 @@ public class MainActivity extends Activity {
             }
             return;
         }
+        if (requestCode == WEBMAIL_FILE_CHOOSER_REQUEST) {
+            ValueCallback<Uri[]> callback = webmailFileChooserCallback;
+            webmailFileChooserCallback = null;
+            if (callback != null) {
+                Uri[] result = WebChromeClient.FileChooserParams.parseResult(
+                        resultCode,
+                        data);
+                callback.onReceiveValue(result);
+            }
+            return;
+        }
         super.onActivityResult(requestCode, resultCode, data);
     }
 
@@ -1320,6 +1563,15 @@ public class MainActivity extends Activity {
                 driveWebView.goBack();
             } else {
                 closeDriveWebView();
+            }
+            return;
+        }
+        if ("webmail".equals(currentMySection) && webmailWebView != null) {
+            if (webmailWebView.canGoBack()) {
+                webmailWebView.goBack();
+            } else {
+                currentMySection = "profile";
+                renderMySharla();
             }
             return;
         }
@@ -6260,6 +6512,7 @@ public class MainActivity extends Activity {
             cookies.flush();
             main.post(() -> {
                 disposeDriveWebView();
+                disposeWebmailWebView();
                 api.setCsrfToken("");
                 session = null;
                 meData = null;
@@ -6284,6 +6537,7 @@ public class MainActivity extends Activity {
                 bottomNav = null;
                 adminButtonAllowed = false;
                 driveTabAllowed = false;
+                webmailTabAllowed = false;
                 nativeRoot = null;
                 showLogin();
                 toast("Logged out of Nerdhalla.");
