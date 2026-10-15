@@ -141,7 +141,11 @@
           currentPath = item.path;
           await refresh();
         } else {
-          location.href = API + '/download?path=' + encodeURIComponent(item.path);
+          const viewUrl = API + '/download?view=1&path=' + encodeURIComponent(item.path);
+          const opened = window.open(viewUrl, '_blank', 'noopener');
+          if (!opened) {
+            location.href = viewUrl;
+          }
         }
         return;
       }
