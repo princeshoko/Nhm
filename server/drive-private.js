@@ -165,7 +165,9 @@
           currentPath = item.path;
           await refresh();
         } else {
-          const viewUrl = API + '/download?view=1&path=' + encodeURIComponent(item.path);
+          const viewUrl = isPreviewableImage(item.name)
+            ? '/private/view?path=' + encodeURIComponent(item.path)
+            : API + '/download?view=1&path=' + encodeURIComponent(item.path);
           window.open(viewUrl, '_blank', 'noopener');
         }
         return;
