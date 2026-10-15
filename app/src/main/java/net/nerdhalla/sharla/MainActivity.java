@@ -964,7 +964,7 @@ public class MainActivity extends Activity {
             if (webmailWebView != null) webmailWebView.reload();
         });
 
-        web.loadUrl(BASE + "email.html");
+        web.loadUrl(BASE + "email.html?app=1");
         return page;
     }
 
