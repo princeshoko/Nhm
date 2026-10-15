@@ -2,7 +2,12 @@
   'use strict';
 
   const API = '/api';
+  const PREVIEW_KEY = 'nerdhallaDrivePreviews';
+  const IMAGE_PREVIEW_EXTENSIONS = new Set([
+    'jpg','jpeg','png','gif','webp','bmp','ico','avif'
+  ]);
   let currentPath = '';
+  let previewsEnabled = localStorage.getItem(PREVIEW_KEY) === '1';
 
   const $ = (sel) => document.querySelector(sel);
 
@@ -31,6 +36,20 @@
     const parts = String(path || '').split('/').filter(Boolean);
     parts.pop();
     return parts.join('/');
+  }
+
+  function isPreviewableImage(name) {
+    const value = String(name || '');
+    const dot = value.lastIndexOf('.');
+    if (dot < 0) return false;
+    return IMAGE_PREVIEW_EXTENSIONS.has(value.slice(dot + 1).toLowerCase());
+  }
+
+  function updatePreviewButton() {
+    const button = $('#preview-button');
+    if (!button) return;
+    button.textContent = previewsEnabled ? 'Previews: On' : 'Previews: Off';
+    button.setAttribute('aria-pressed', previewsEnabled ? 'true' : 'false');
   }
 
   function setStatus(message, bad = false) {
@@ -100,10 +119,15 @@
       const item = entries[i];
       const icon = item.is_dir ? '📁' : '📄';
       const size = item.is_dir ? '—' : humanBytes(item.size);
+      const showPreview = previewsEnabled && !item.is_dir && isPreviewableImage(item.name);
+      const preview = showPreview
+        ? `<img class="preview-thumb" src="${API}/download?view=1&path=${encodeURIComponent(item.path)}" alt="" loading="lazy" data-action="open" data-index="${i}">`
+        : '';
       rows.push(`
-        <div class="dir-row">
+        <div class="dir-row ${showPreview ? 'has-preview' : ''}">
           <div class="name-cell">
             <span class="icon">${icon}</span>
+            ${preview}
             <button type="button" class="name-link ${item.is_dir ? 'folder' : ''}" data-action="open" data-index="${i}">${esc(item.name)}</button>
           </div>
           <div class="meta modified">${esc(formatDate(item.modified))}</div>
@@ -272,6 +296,19 @@
 
   $('#refresh-button').onclick = async () => {
     try { await refresh(); } catch (err) { setStatus(err.message || 'Could not refresh.', true); }
+  };
+
+  updatePreviewButton();
+  $('#preview-button').onclick = async () => {
+    previewsEnabled = !previewsEnabled;
+    localStorage.setItem(PREVIEW_KEY, previewsEnabled ? '1' : '0');
+    updatePreviewButton();
+    try {
+      await refresh();
+      setStatus(previewsEnabled ? 'Image previews enabled.' : 'Image previews disabled.');
+    } catch (err) {
+      setStatus(err.message || 'Could not update previews.', true);
+    }
   };
 
   const drop = $('#drop-zone');
