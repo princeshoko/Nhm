@@ -874,6 +874,12 @@ public class MainActivity extends Activity {
 
         web.setWebViewClient(new WebViewClient() {
             @Override
+            public void onPageFinished(WebView view, String url) {
+                super.onPageFinished(view, url);
+                stripWebsiteChromeForApp(view);
+            }
+
+            @Override
             public boolean shouldOverrideUrlLoading(
                     WebView view,
                     WebResourceRequest request) {
@@ -966,6 +972,47 @@ public class MainActivity extends Activity {
 
         web.loadUrl(BASE + "email.html?app=1");
         return page;
+    }
+
+    private void stripWebsiteChromeForApp(WebView view) {
+        if (view == null) return;
+
+        String js =
+                "(function(){" +
+                "try{" +
+                "var selectors=[" +
+                "'header'," +
+                "'footer'," +
+                "'.topbar'," +
+                "'.topbar-inner'," +
+                "'.nerdhalla-site-footer'," +
+                "'.site-footer'," +
+                "'.footer'," +
+                "'nav.nav'," +
+                "'nav[aria-label=\\\"Site navigation\\\"]'," +
+                "'nav[aria-label=\\\"Footer navigation\\\"]'" +
+                "];" +
+                "selectors.forEach(function(sel){" +
+                "document.querySelectorAll(sel).forEach(function(el){" +
+                "el.style.setProperty('display','none','important');" +
+                "});" +
+                "});" +
+                "document.documentElement.style.setProperty('margin','0','important');" +
+                "document.documentElement.style.setProperty('padding','0','important');" +
+                "document.body.style.setProperty('margin','0','important');" +
+                "document.body.style.setProperty('padding','0','important');" +
+                "var main=document.querySelector('main');" +
+                "if(main){" +
+                "main.style.setProperty('width','100%','important');" +
+                "main.style.setProperty('max-width','none','important');" +
+                "main.style.setProperty('margin','0','important');" +
+                "main.style.setProperty('padding','10px 12px 24px','important');" +
+                "main.style.setProperty('box-sizing','border-box','important');" +
+                "}" +
+                "}catch(e){}" +
+                "})();";
+
+        view.evaluateJavascript(js, null);
     }
 
     private void startWebmailDownload(
