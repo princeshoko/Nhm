@@ -29,6 +29,13 @@ import android.view.View;
 import android.view.ViewGroup;
 import android.view.WindowInsets;
 import android.webkit.CookieManager;
+import android.webkit.ValueCallback;
+import android.webkit.WebChromeClient;
+import android.webkit.WebResourceRequest;
+import android.webkit.WebSettings;
+import android.webkit.WebView;
+import android.webkit.WebViewClient;
+import android.webkit.URLUtil;
 import android.widget.ArrayAdapter;
 import android.widget.Button;
 import android.widget.EditText;
@@ -65,6 +72,7 @@ import java.util.concurrent.Executors;
 public class MainActivity extends Activity {
     private static final String BASE = "https://nerdhalla.net/";
     private static final String MOBILE_LOGIN = BASE + "mobile-login.php";
+    private static final int DRIVE_FILE_CHOOSER_REQUEST = 4107;
 
     private static final int BG = Color.rgb(11, 8, 17);
     private static final int BG2 = Color.rgb(18, 12, 28);
@@ -92,6 +100,9 @@ public class MainActivity extends Activity {
     private LinearLayout bottomNav;
     private boolean adminButtonAllowed = false;
     private boolean driveTabAllowed = false;
+    private boolean driveBrowserOpen = false;
+    private WebView driveWebView;
+    private ValueCallback<Uri[]> driveFileChooserCallback;
     private HorizontalScrollView activeMenuScroller;
     private float swipeDownX;
     private float swipeDownY;
@@ -188,7 +199,7 @@ public class MainActivity extends Activity {
 
     @Override
     public boolean dispatchTouchEvent(MotionEvent event) {
-        if (event != null && nativeRoot != null && nativeRoot.getParent() != null) {
+        if (event != null && nativeRoot != null && nativeRoot.getParent() != null && !driveBrowserOpen) {
             switch (event.getActionMasked()) {
                 case MotionEvent.ACTION_DOWN:
                     swipeDownX = event.getRawX();
@@ -532,6 +543,7 @@ public class MainActivity extends Activity {
         bottomNav.addView(adminNav, adminParams);
 
         myNav.setOnClickListener(v -> {
+            disposeDriveWebView();
             pendingMenuTransitionDirection = 0;
             currentTop = "my";
             titleText.setText("My Sharla");
@@ -541,6 +553,7 @@ public class MainActivity extends Activity {
 
         adminNav.setOnClickListener(v -> {
             if (!adminButtonAllowed) return;
+            disposeDriveWebView();
             pendingMenuTransitionDirection = 0;
             currentTop = "admin";
             titleText.setText("Sharla Admin");
@@ -857,11 +870,6 @@ public class MainActivity extends Activity {
             holder.addView(create, buttonParams());
             create.setOnClickListener(v -> promptCreateDrive(holder));
 
-            Button site = secondaryButton("Open Nerdhalla Drive");
-            holder.addView(site, buttonParams());
-            site.setOnClickListener(v ->
-                    openExternalUrl("https://nerdhalla.net/account.html#drive"));
-
             return;
         }
 
@@ -1025,8 +1033,7 @@ public class MainActivity extends Activity {
 
         Button open = primaryButton("Open Drive");
         holder.addView(open, buttonParams());
-        String finalWebUrl = webUrl;
-        open.setOnClickListener(v -> openExternalUrl(finalWebUrl));
+        open.setOnClickListener(v -> openDriveInApp());
 
         Button refresh = secondaryButton("Refresh Drive");
         holder.addView(refresh, buttonParams());
@@ -1053,6 +1060,265 @@ public class MainActivity extends Activity {
                         "Delete Nerdhalla Drive?",
                         "This permanently deletes the Drive and every file in it. This cannot be undone.",
                         () -> promptDeleteDrive(holder, finalUsername)));
+    }
+
+    private void openDriveInApp() {
+        if (!driveTabAllowed) {
+            toast("Your Discord roles do not currently have Nerdhalla Drive access.");
+            return;
+        }
+
+        showBusy(true);
+        io.execute(() -> {
+            try {
+                JSONObject handoff = api.api("drive_browser_token");
+                String token = handoff.optString("token", "").trim();
+                if (token.isEmpty()) {
+                    throw new Exception("Nerdhalla did not return a Drive handoff token.");
+                }
+                String url = "https://drive.nerdhalla.net/private/?token=" +
+                        URLEncoder.encode(token, "UTF-8");
+
+                main.post(() -> {
+                    showBusy(false);
+                    showDriveWebView(url);
+                });
+            } catch (Exception e) {
+                main.post(() -> {
+                    showBusy(false);
+                    toast(e.getMessage() == null
+                            ? "Could not open your private Drive."
+                            : e.getMessage());
+                });
+            }
+        });
+    }
+
+    private void showDriveWebView(String url) {
+        disposeDriveWebView();
+        driveBrowserOpen = true;
+
+        LinearLayout page = new LinearLayout(this);
+        page.setOrientation(LinearLayout.VERTICAL);
+        page.setBackgroundColor(BG);
+
+        LinearLayout bar = new LinearLayout(this);
+        bar.setOrientation(LinearLayout.HORIZONTAL);
+        bar.setGravity(Gravity.CENTER_VERTICAL);
+        bar.setPadding(dp(10), dp(7), dp(10), dp(7));
+        bar.setBackgroundColor(PANEL);
+
+        Button back = secondaryButton("← Drive");
+        bar.addView(back, new LinearLayout.LayoutParams(dp(92), dp(42)));
+
+        TextView title = text("Private Drive", 15, TEXT, true);
+        title.setGravity(Gravity.CENTER_VERTICAL);
+        LinearLayout.LayoutParams titleParams =
+                new LinearLayout.LayoutParams(0, dp(42), 1f);
+        titleParams.leftMargin = dp(10);
+        bar.addView(title, titleParams);
+
+        Button reload = secondaryButton("↻");
+        bar.addView(reload, new LinearLayout.LayoutParams(dp(48), dp(42)));
+
+        page.addView(bar, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT));
+
+        WebView web = new WebView(this);
+        driveWebView = web;
+        web.setBackgroundColor(BG);
+
+        WebSettings settings = web.getSettings();
+        settings.setJavaScriptEnabled(true);
+        settings.setDomStorageEnabled(true);
+        settings.setJavaScriptCanOpenWindowsAutomatically(true);
+        settings.setSupportMultipleWindows(false);
+        settings.setAllowFileAccess(false);
+        settings.setAllowContentAccess(true);
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+            settings.setMixedContentMode(WebSettings.MIXED_CONTENT_NEVER_ALLOW);
+        }
+
+        CookieManager cookies = CookieManager.getInstance();
+        cookies.setAcceptCookie(true);
+        cookies.setAcceptThirdPartyCookies(web, true);
+
+        web.setWebViewClient(new WebViewClient() {
+            @Override
+            public boolean shouldOverrideUrlLoading(
+                    WebView view,
+                    WebResourceRequest request) {
+                Uri uri = request.getUrl();
+                String scheme = uri.getScheme() == null ? "" : uri.getScheme();
+                String host = uri.getHost() == null ? "" : uri.getHost();
+
+                if (!"http".equalsIgnoreCase(scheme) &&
+                        !"https".equalsIgnoreCase(scheme)) {
+                    return true;
+                }
+
+                if ("drive.nerdhalla.net".equalsIgnoreCase(host)) {
+                    return false;
+                }
+
+                if (("nerdhalla.net".equalsIgnoreCase(host) ||
+                        "www.nerdhalla.net".equalsIgnoreCase(host)) &&
+                        "/account.html".equals(uri.getPath())) {
+                    closeDriveWebView();
+                    return true;
+                }
+
+                openExternalUrl(uri.toString());
+                return true;
+            }
+        });
+
+        web.setWebChromeClient(new WebChromeClient() {
+            @Override
+            public boolean onShowFileChooser(
+                    WebView webView,
+                    ValueCallback<Uri[]> filePathCallback,
+                    FileChooserParams fileChooserParams) {
+
+                if (driveFileChooserCallback != null) {
+                    driveFileChooserCallback.onReceiveValue(null);
+                }
+                driveFileChooserCallback = filePathCallback;
+
+                try {
+                    Intent intent = fileChooserParams.createIntent();
+                    startActivityForResult(intent, DRIVE_FILE_CHOOSER_REQUEST);
+                    return true;
+                } catch (Exception e) {
+                    driveFileChooserCallback = null;
+                    toast("Could not open Android's file picker.");
+                    return false;
+                }
+            }
+        });
+
+        web.setDownloadListener((downloadUrl, userAgent, contentDisposition, mimeType, contentLength) ->
+                startDriveDownload(downloadUrl, userAgent, contentDisposition, mimeType));
+
+        page.addView(web, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                0,
+                1f));
+
+        back.setOnClickListener(v -> closeDriveWebView());
+        reload.setOnClickListener(v -> {
+            if (driveWebView != null) driveWebView.reload();
+        });
+
+        setContent(page);
+        web.loadUrl(url);
+    }
+
+    private void startDriveDownload(
+            String url,
+            String userAgent,
+            String contentDisposition,
+            String mimeType) {
+        try {
+            Uri uri = Uri.parse(url);
+            DownloadManager.Request request = new DownloadManager.Request(uri);
+            String fileName = URLUtil.guessFileName(url, contentDisposition, mimeType);
+            request.setTitle(fileName);
+            request.setDescription("Nerdhalla Drive download");
+            request.setNotificationVisibility(
+                    DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED);
+
+            String cookie = CookieManager.getInstance().getCookie(url);
+            if (cookie != null && !cookie.isEmpty()) {
+                request.addRequestHeader("Cookie", cookie);
+            }
+            if (userAgent != null && !userAgent.isEmpty()) {
+                request.addRequestHeader("User-Agent", userAgent);
+            }
+            if (mimeType != null && !mimeType.isEmpty()) {
+                request.setMimeType(mimeType);
+            }
+
+            request.setDestinationInExternalPublicDir(
+                    Environment.DIRECTORY_DOWNLOADS,
+                    fileName.replaceAll("[^A-Za-z0-9._ -]", "_"));
+
+            DownloadManager manager =
+                    (DownloadManager) getSystemService(DOWNLOAD_SERVICE);
+            if (manager == null) {
+                throw new Exception("Android Download Manager is unavailable.");
+            }
+            manager.enqueue(request);
+            toast("Drive download started.");
+        } catch (Exception e) {
+            toast("Could not start Drive download: " + e.getMessage());
+        }
+    }
+
+    private void closeDriveWebView() {
+        disposeDriveWebView();
+        currentTop = "my";
+        currentMySection = "drive";
+        if (titleText != null) titleText.setText("My Sharla");
+        updateBottomNav();
+        if (meData != null) {
+            renderMySharla();
+        } else {
+            loadMySharla();
+        }
+    }
+
+    private void disposeDriveWebView() {
+        driveBrowserOpen = false;
+
+        if (driveFileChooserCallback != null) {
+            driveFileChooserCallback.onReceiveValue(null);
+            driveFileChooserCallback = null;
+        }
+
+        if (driveWebView != null) {
+            try {
+                driveWebView.stopLoading();
+                driveWebView.loadUrl("about:blank");
+                driveWebView.setWebChromeClient(null);
+                driveWebView.setWebViewClient(null);
+                driveWebView.destroy();
+            } catch (Exception ignored) {}
+            driveWebView = null;
+        }
+    }
+
+    @Override
+    protected void onActivityResult(
+            int requestCode,
+            int resultCode,
+            Intent data) {
+        if (requestCode == DRIVE_FILE_CHOOSER_REQUEST) {
+            ValueCallback<Uri[]> callback = driveFileChooserCallback;
+            driveFileChooserCallback = null;
+            if (callback != null) {
+                Uri[] result = WebChromeClient.FileChooserParams.parseResult(
+                        resultCode,
+                        data);
+                callback.onReceiveValue(result);
+            }
+            return;
+        }
+        super.onActivityResult(requestCode, resultCode, data);
+    }
+
+    @Override
+    public void onBackPressed() {
+        if (driveBrowserOpen && driveWebView != null) {
+            if (driveWebView.canGoBack()) {
+                driveWebView.goBack();
+            } else {
+                closeDriveWebView();
+            }
+            return;
+        }
+        super.onBackPressed();
     }
 
     private void promptCreateDrive(LinearLayout holder) {
@@ -5988,6 +6254,7 @@ public class MainActivity extends Activity {
         cookies.removeAllCookies(removed -> {
             cookies.flush();
             main.post(() -> {
+                disposeDriveWebView();
                 api.setCsrfToken("");
                 session = null;
                 meData = null;
