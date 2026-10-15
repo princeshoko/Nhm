@@ -204,7 +204,7 @@ public class MainActivity extends Activity {
     @Override
     public boolean dispatchTouchEvent(MotionEvent event) {
         if (event != null && nativeRoot != null && nativeRoot.getParent() != null &&
-                !driveBrowserOpen && webmailWebView == null) {
+                !driveBrowserOpen) {
             switch (event.getActionMasked()) {
                 case MotionEvent.ACTION_DOWN:
                     swipeDownX = event.getRawX();
