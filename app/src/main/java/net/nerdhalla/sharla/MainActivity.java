@@ -90,6 +90,8 @@ public class MainActivity extends Activity {
     private final ApiClient api = new ApiClient();
     private final ExecutorService io = Executors.newSingleThreadExecutor();
     private final Handler main = new Handler(Looper.getMainLooper());
+    private AppUpdateHelper appUpdates;
+    private TextView checkUpdatesLink;
 
     private FrameLayout root;
     private LinearLayout nativeRoot;
@@ -159,6 +161,7 @@ public class MainActivity extends Activity {
         getWindow().setNavigationBarColor(BG);
 
         CookieManager.getInstance().setAcceptCookie(true);
+        appUpdates = new AppUpdateHelper(this, api, io, main);
 
         root = new FrameLayout(this);
         root.setBackgroundColor(BG);
@@ -424,7 +427,14 @@ public class MainActivity extends Activity {
             }
         });
 
+        Button checkUpdates = secondaryButton("Check for Updates");
+        LinearLayout.LayoutParams updateParams = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, dp(46));
+        updateParams.setMargins(dp(10), dp(14), dp(10), 0);
+        shell.addView(checkUpdates, updateParams);
+
         root.addView(shell, match());
+        appUpdates.attachLogin(checkUpdates);
 
         TextView build = text(buildLabel(), 12, TEXT, true);
         build.setText(rainbowAll(buildLabel()));
@@ -453,6 +463,13 @@ public class MainActivity extends Activity {
         nativeRoot.addView(busy, new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, dp(3)));
 
+        Button updateBanner = secondaryButton("New Nerdhalla update available");
+        updateBanner.setVisibility(View.GONE);
+        LinearLayout.LayoutParams updateBannerParams = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, dp(42));
+        updateBannerParams.setMargins(dp(10), dp(3), dp(10), dp(3));
+        nativeRoot.addView(updateBanner, updateBannerParams);
+
         contentHost = new FrameLayout(this);
         contentHost.setBackgroundColor(BG);
         nativeRoot.addView(contentHost, new LinearLayout.LayoutParams(
@@ -462,6 +479,7 @@ public class MainActivity extends Activity {
                 ViewGroup.LayoutParams.MATCH_PARENT, dp(70)));
 
         root.addView(nativeRoot, match());
+        appUpdates.attachNative(checkUpdatesLink, updateBanner);
 
         currentTop = "my";
         adminButtonAllowed = false;
@@ -496,6 +514,10 @@ public class MainActivity extends Activity {
         TextView build = text(buildLabel(), 10, TEXT, true);
         build.setText(rainbowAll(buildLabel()));
         labels.addView(build);
+
+        checkUpdatesLink = text("Check for Updates ↻", 10, GREEN, true);
+        checkUpdatesLink.setPadding(0, dp(2), 0, 0);
+        labels.addView(checkUpdatesLink);
 
         bar.addView(labels, new LinearLayout.LayoutParams(0,
                 ViewGroup.LayoutParams.MATCH_PARENT, 1f));
@@ -7293,6 +7315,7 @@ public class MainActivity extends Activity {
     protected void onResume() {
         super.onResume();
         appInForeground = true;
+        if (appUpdates != null) appUpdates.onResume();
     }
 
     @Override
