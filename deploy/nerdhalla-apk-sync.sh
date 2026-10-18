@@ -46,7 +46,7 @@ TAG="${LINKS[2]}"
 
 "${CURL[@]}" "$META_URL" -o "$TMP/apk-build.json"
 
-php -r '$a = json_decode(file_get_contents($argv[1]), true); if (!is_array($a) || !is_int($a["build"] ?? null) || $a["build"] < 1 || !is_int($a["size_bytes"] ?? null) || $a["size_bytes"] < 50000 || $a["size_bytes"] > 150000000 || !is_int($a["run_id"] ?? null) || !is_int($a["run_attempt"] ?? null) || "apk-" . $a["run_id"] . "-" . $a["run_attempt"] !== $argv[2] || !is_string($a["sha256"] ?? null) || !preg_match("/^[a-f0-9]{64}$/", $a["sha256"]) || !is_string($a["version"] ?? null) || !preg_match("/^[A-Za-z0-9._+-]{1,64}$/", $a["version"])) { fwrite(STDERR, "Invalid APK build metadata\n"); exit(1); } echo $a["build"], "\n", $a["version"], "\n", $a["sha256"], "\n", $a["size_bytes"], "\n";' "$TMP/apk-build.json" "$TAG" > "$TMP/values"
+php -r '$a = json_decode(file_get_contents($argv[1]), true); if (!is_array($a) || !is_int($a["build"] ?? null) || $a["build"] < 1 || !is_int($a["size_bytes"] ?? null) || $a["size_bytes"] < 50000 || $a["size_bytes"] > 150000000 || !is_int($a["run_id"] ?? null) || !is_int($a["run_attempt"] ?? null) || "apk-" . $a["run_id"] . "-" . $a["run_attempt"] !== $argv[2] || !is_string($a["sha256"] ?? null) || !preg_match("/^[a-f0-9]{64}$/", $a["sha256"]) || !is_string($a["version"] ?? null) || !preg_match("/^[A-Za-z0-9._+-]{1,64}$/", $a["version"]) || ($a["build_type"] ?? "") !== "release" || ($a["signing_cert_sha256"] ?? "") !== "a19dd27a5de82e5989d44c318e0a66b5ef2ea1e3fb43a76e90d49633f655eb35") { fwrite(STDERR, "Invalid APK build metadata\n"); exit(1); } echo $a["build"], "\n", $a["version"], "\n", $a["sha256"], "\n", $a["size_bytes"], "\n";' "$TMP/apk-build.json" "$TAG" > "$TMP/values"
 
 mapfile -t VALUES < "$TMP/values"
 BUILD="${VALUES[0]}"

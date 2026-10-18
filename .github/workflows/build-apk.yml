@@ -51,18 +51,64 @@ jobs:
         with:
           gradle-version: '8.9'
 
-      - name: Build debug APK
-        run: gradle :app:assembleDebug --stacktrace
+      # Never publish a default debug-signed APK. A successful release build
+      # must use the stable Nerdhalla PKCS#12 key and expected public certificate.
+      - name: Install permanent Android signing key
+        shell: bash
+        env:
+          NERDHALLA_KEYSTORE_B64: ${{ secrets.NERDHALLA_KEYSTORE_B64 }}
+          NERDHALLA_KEYSTORE_PASSWORD: ${{ secrets.NERDHALLA_KEYSTORE_PASSWORD }}
+        run: |
+          set -euo pipefail
+          if [[ -z "$NERDHALLA_KEYSTORE_B64" || -z "$NERDHALLA_KEYSTORE_PASSWORD" ]]; then
+            echo "::error::Missing permanent APK signing secrets. Refusing to build/publish an unsigned or debug-signed release."
+            exit 1
+          fi
+          KEYFILE="$RUNNER_TEMP/nerdhalla-release.p12"
+          umask 077
+          printf '%s' "$NERDHALLA_KEYSTORE_B64" | base64 --decode > "$KEYFILE"
+          chmod 600 "$KEYFILE"
+          CERT_SHA="$(openssl pkcs12 -in "$KEYFILE" -passin env:NERDHALLA_KEYSTORE_PASSWORD -clcerts -nokeys | openssl x509 -noout -fingerprint -sha256 | sed 's/.*=//;s/://g' | tr '[:upper:]' '[:lower:]')"
+          EXPECTED="a19dd27a5de82e5989d44c318e0a66b5ef2ea1e3fb43a76e90d49633f655eb35"
+          if [[ "$CERT_SHA" != "$EXPECTED" ]]; then
+            echo "::error::Incorrect signing certificate. Refusing release."
+            exit 1
+          fi
+          echo "NERDHALLA_KEYSTORE_FILE=$KEYFILE" >> "$GITHUB_ENV"
+          echo "Permanent signing certificate verified."
 
-      - name: Upload APK
+      - name: Build permanently signed release APK
+        env:
+          NERDHALLA_KEYSTORE_PASSWORD: ${{ secrets.NERDHALLA_KEYSTORE_PASSWORD }}
+        run: gradle :app:assembleRelease --stacktrace
+
+      - name: Verify Android signing certificate and package
+        shell: bash
+        run: |
+          set -euo pipefail
+          APK="app/build/outputs/apk/release/app-release.apk"
+          test -s "$APK"
+          REPORT="$RUNNER_TEMP/apk-signature.txt"
+          "$ANDROID_SDK_ROOT/build-tools/35.0.0/apksigner" verify --verbose --print-certs "$APK" > "$REPORT"
+          grep -Eq '^Verified using v2 scheme .*: true$' "$REPORT"
+          SIGNER="$(sed -nE 's/^Signer #1 certificate SHA-256 digest: ([a-fA-F0-9]{64})$/\1/p' "$REPORT" | tr '[:upper:]' '[:lower:]')"
+          EXPECTED="a19dd27a5de82e5989d44c318e0a66b5ef2ea1e3fb43a76e90d49633f655eb35"
+          if [[ "$SIGNER" != "$EXPECTED" ]]; then
+            echo "::error::Release APK is signed with an unexpected certificate."
+            exit 1
+          fi
+          "$ANDROID_SDK_ROOT/build-tools/35.0.0/aapt" dump badging "$APK" |
+            grep -q "^package: name='net.nerdhalla.sharla' "
+          echo "Verified permanent signer and application ID."
+
+      - name: Upload signed APK artifact
         uses: actions/upload-artifact@v4
         with:
-          name: Nerdhalla-Sharla-debug-apk
-          path: app/build/outputs/apk/debug/app-debug.apk
+          name: Nerdhalla-Sharla-signed-apk
+          path: app/build/outputs/apk/release/app-release.apk
           if-no-files-found: error
 
-      # Use the actual built APK metadata, not a manually maintained site number.
-      - name: Prepare verified APK and build metadata
+      - name: Prepare signed APK build metadata
         shell: bash
         run: |
           set -euo pipefail
@@ -74,19 +120,21 @@ jobs:
           import subprocess
           from pathlib import Path
 
-          source = Path("app/build/outputs/apk/debug/app-debug.apk")
+          source = Path("app/build/outputs/apk/release/app-release.apk")
           if not source.is_file() or source.stat().st_size < 50000:
-              raise SystemExit("APK missing or implausibly small")
+              raise SystemExit("Signed release APK missing or implausibly small")
           aapt = Path(os.environ["ANDROID_SDK_ROOT"]) / "build-tools/35.0.0/aapt"
           result = subprocess.check_output([str(aapt), "dump", "badging", str(source)], text=True)
           package = next((line for line in result.splitlines() if line.startswith("package:")), "")
           code = re.search(r"versionCode='([0-9]+)'", package)
           name = re.search(r"versionName='([^']+)'", package)
-          if not code or not name:
-              raise SystemExit("Unable to read APK build/version")
+          if not code or not name or "name='net.nerdhalla.sharla'" not in package:
+              raise SystemExit("Unable to verify APK application ID / build / version")
           data = {
               "build": int(code.group(1)),
               "version": name.group(1),
+              "build_type": "release",
+              "signing_cert_sha256": "a19dd27a5de82e5989d44c318e0a66b5ef2ea1e3fb43a76e90d49633f655eb35",
               "sha256": hashlib.sha256(source.read_bytes()).hexdigest(),
               "size_bytes": source.stat().st_size,
               "run_id": int(os.environ["GITHUB_RUN_ID"]),
@@ -97,10 +145,9 @@ jobs:
           print(json.dumps(data, indent=2))
           PY
 
-      # Publish an immutable release for each successful main-branch build.
-      # Hydra downloads the public release over HTTPS; no Hydra password/SSH key
-      # or GitHub personal access token is needed on either side.
-      - name: Publish verified APK release
+      # Hydra downloads public releases. It never needs SSH credentials or an
+      # incoming webhook, and failed/unsigned builds cannot replace its APK.
+      - name: Publish signed APK release
         if: github.ref == 'refs/heads/main'
         shell: bash
         env:
@@ -110,11 +157,11 @@ jobs:
           VERSION="$(python3 -c 'import json; print(json.load(open("apk-build.json"))["version"])')"
           BUILD="$(python3 -c 'import json; print(json.load(open("apk-build.json"))["build"])')"
           TAG="apk-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
-          cp app/build/outputs/apk/debug/app-debug.apk nerdhalla-latest.apk
+          cp app/build/outputs/apk/release/app-release.apk nerdhalla-latest.apk
           gh release create "$TAG" \
             nerdhalla-latest.apk \
             apk-build.json \
             --target "$GITHUB_SHA" \
-            --title "Nerdhalla Android $VERSION (build $BUILD)" \
-            --notes "Automated Nerdhalla Android build. Source commit: $GITHUB_SHA" \
+            --title "Nerdhalla Android $VERSION (signed build $BUILD)" \
+            --notes "Nerdhalla permanently signed Android APK. Signing certificate SHA-256: a19dd27a5de82e5989d44c318e0a66b5ef2ea1e3fb43a76e90d49633f655eb35" \
             --latest
