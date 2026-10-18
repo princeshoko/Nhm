@@ -108,9 +108,10 @@ jobs:
           VERSION="$(python3 -c 'import json; print(json.load(open("apk-build.json"))["version"])')"
           BUILD="$(python3 -c 'import json; print(json.load(open("apk-build.json"))["build"])')"
           TAG="apk-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          cp app/build/outputs/apk/debug/app-debug.apk nerdhalla-latest.apk
           gh release create "$TAG" \
-            "app/build/outputs/apk/debug/app-debug.apk#nerdhalla-latest.apk" \
-            "apk-build.json#apk-build.json" \
+            nerdhalla-latest.apk \
+            apk-build.json \
             --target "$GITHUB_SHA" \
             --title "Nerdhalla Android $VERSION (build $BUILD)" \
             --notes "Automated Nerdhalla Android build. Source commit: $GITHUB_SHA" \
