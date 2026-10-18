@@ -5,6 +5,13 @@ on:
   push:
     branches: [ main ]
 
+permissions:
+  contents: write
+
+concurrency:
+  group: nerdhalla-apk-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -51,3 +58,60 @@ jobs:
           name: Nerdhalla-Sharla-debug-apk
           path: app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
+
+      # Use the actual built APK metadata, not a manually maintained site number.
+      - name: Prepare verified APK and build metadata
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import hashlib
+          import json
+          import os
+          import re
+          import subprocess
+          from pathlib import Path
+
+          source = Path("app/build/outputs/apk/debug/app-debug.apk")
+          if not source.is_file() or source.stat().st_size < 50000:
+              raise SystemExit("APK missing or implausibly small")
+          aapt = Path(os.environ["ANDROID_SDK_ROOT"]) / "build-tools/35.0.0/aapt"
+          result = subprocess.check_output([str(aapt), "dump", "badging", str(source)], text=True)
+          package = next((line for line in result.splitlines() if line.startswith("package:")), "")
+          code = re.search(r"versionCode='([0-9]+)'", package)
+          name = re.search(r"versionName='([^']+)'", package)
+          if not code or not name:
+              raise SystemExit("Unable to read APK build/version")
+          data = {
+              "build": int(code.group(1)),
+              "version": name.group(1),
+              "sha256": hashlib.sha256(source.read_bytes()).hexdigest(),
+              "size_bytes": source.stat().st_size,
+              "run_id": int(os.environ["GITHUB_RUN_ID"]),
+              "run_attempt": int(os.environ["GITHUB_RUN_ATTEMPT"]),
+              "source_sha": os.environ["GITHUB_SHA"]
+          }
+          Path("apk-build.json").write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
+          print(json.dumps(data, indent=2))
+          PY
+
+      # Publish an immutable release for each successful main-branch build.
+      # Hydra downloads the public release over HTTPS; no Hydra password/SSH key
+      # or GitHub personal access token is needed on either side.
+      - name: Publish verified APK release
+        if: github.ref == 'refs/heads/main'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          VERSION="$(python3 -c 'import json; print(json.load(open("apk-build.json"))["version"])')"
+          BUILD="$(python3 -c 'import json; print(json.load(open("apk-build.json"))["build"])')"
+          TAG="apk-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          gh release create "$TAG" \
+            "app/build/outputs/apk/debug/app-debug.apk#nerdhalla-latest.apk" \
+            "apk-build.json#apk-build.json" \
+            --target "$GITHUB_SHA" \
+            --title "Nerdhalla Android $VERSION (build $BUILD)" \
+            --notes "Automated Nerdhalla Android build. Source commit: $GITHUB_SHA" \
+            --latest
