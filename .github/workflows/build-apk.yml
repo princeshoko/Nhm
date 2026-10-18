@@ -29,8 +29,15 @@ jobs:
       - name: Install Android SDK 35
         run: /usr/local/lib/android/sdk/cmdline-tools/latest/bin/sdkmanager "platforms;android-35" "build-tools;35.0.0" "platform-tools"
 
-      - name: Verify bundled rainbow chalk NH logo
+      # Pin the website and Android launch/login/header branding to the same
+      # artwork. SHA-256 check prevents a CDN error page or unrelated image
+      # from silently entering the APK.
+      - name: Install verified rainbow unicorn logo
         run: |
+          curl --fail --location --show-error --silent --retry 3 \
+            'https://nerdhalla.net/nerdhalla-chalk-logo.webp?v=20261018-unicorn' \
+            --output app/src/main/res/drawable/nerdhalla_icon.webp
+          echo 'd7bb17b3bc9f597f51d2633051b70d31e85b51a96fba2ab195dd303cd888987f  app/src/main/res/drawable/nerdhalla_icon.webp' | sha256sum -c -
           test -s app/src/main/res/drawable/nerdhalla_icon.webp
           file app/src/main/res/drawable/nerdhalla_icon.webp
 
