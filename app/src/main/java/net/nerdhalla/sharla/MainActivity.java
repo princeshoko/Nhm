@@ -709,11 +709,17 @@ public class MainActivity extends Activity {
             try {
                 JSONObject d = api.api("me");
                 boolean canUseDrive = false;
+                boolean driveStatusUnavailable = false;
                 try {
                     JSONObject driveStatus = api.api("drive");
-                    canUseDrive = driveStatus.optBoolean("eligible", false);
+                    // A previously created Drive still deserves a visible status page.
+                    // The server remains responsible for enforcing role permissions.
+                    canUseDrive = driveStatus.optBoolean("eligible", false)
+                            || driveStatus.optBoolean("has_drive", false);
                 } catch (Exception ignored) {
-                    canUseDrive = false;
+                    // Never hide the Drive tab solely because a network check failed.
+                    // Opening it will retry the server's authorization check.
+                    driveStatusUnavailable = true;
                 }
 
                 boolean canUseWebmail = false;
@@ -724,7 +730,7 @@ public class MainActivity extends Activity {
                     canUseWebmail = false;
                 }
 
-                final boolean allowDriveTab = canUseDrive;
+                final boolean allowDriveTab = canUseDrive || driveStatusUnavailable;
                 final boolean allowWebmailTab = canUseWebmail;
                 main.post(() -> {
                     meData = d;
@@ -1321,23 +1327,31 @@ public class MainActivity extends Activity {
         protocolRow.setOrientation(LinearLayout.HORIZONTAL);
 
         LinearLayout ftpBox = cardInner();
-        ftpBox.addView(text("FTP", 11, MUTED, true));
+        ftpBox.addView(text("FTP/SFTP", 11, MUTED, true));
         ftpBox.addView(text(
-                ftpHost + ":" + ftpPort + "\nExplicit FTPS",
-                13,
+                ftpHost + ":" + ftpPort + "\n" + sftpHost + ":" + sftpPort,
+                12,
                 TEXT,
                 false));
 
-        LinearLayout sftpBox = cardInner();
-        sftpBox.addView(text("SFTP", 11, MUTED, true));
-        sftpBox.addView(text(
-                sftpHost + ":" + sftpPort,
-                13,
+        LinearLayout dnsBox = cardInner();
+        SpannableString dnsLabel = new SpannableString("Private DNS (ad blocking)");
+        dnsLabel.setSpan(
+                new android.text.style.RelativeSizeSpan(0.85f),
+                "Private DNS ".length(),
+                dnsLabel.length(),
+                Spannable.SPAN_EXCLUSIVE_EXCLUSIVE);
+        TextView dnsHeading = text("", 11, MUTED, true);
+        dnsHeading.setText(dnsLabel);
+        dnsBox.addView(dnsHeading);
+        dnsBox.addView(text(
+                "dns1.nerdhalla.net\ndns2.nerdhalla.net",
+                12,
                 TEXT,
                 false));
 
         protocolRow.addView(ftpBox, halfLeft);
-        protocolRow.addView(sftpBox, halfRight);
+        protocolRow.addView(dnsBox, halfRight);
         holder.addView(protocolRow);
 
         if (!mounted) {
