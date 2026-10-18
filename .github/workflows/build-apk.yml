@@ -29,9 +29,12 @@ jobs:
       - name: Install Android SDK 35
         run: /usr/local/lib/android/sdk/cmdline-tools/latest/bin/sdkmanager "platforms;android-35" "build-tools;35.0.0" "platform-tools"
 
-      - name: Verify bundled rainbow chalk NH logo
+      # The same verified rainbow unicorn artwork is stored directly in
+      # this repository. Build does not depend on Hydra being deployed first.
+      - name: Verify bundled Nerdhalla unicorn logo
         run: |
           test -s app/src/main/res/drawable/nerdhalla_icon.webp
+          echo '9764e87addf7666d908da56c170df73dea9a07b2b38bf3a33347a720ceffb2a6  app/src/main/res/drawable/nerdhalla_icon.webp' | sha256sum -c -
           file app/src/main/res/drawable/nerdhalla_icon.webp
 
       - name: Set up Gradle
