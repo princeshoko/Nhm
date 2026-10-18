@@ -166,7 +166,7 @@ final class AppUpdateHelper {
         }
         if (headerLink != null) {
             headerLink.setText(newer
-                    ? "⬇ Update available: " + availableBuild
+                    ? "⬇ Update build " + availableBuild
                     : "Check for Updates ↻");
             headerLink.setContentDescription(newer
                     ? "Download Nerdhalla build " + availableBuild
