@@ -60,6 +60,19 @@ if [[ -f "$INFO" ]]; then
     echo "STOP: Refusing downgrade from $EXISTING_BUILD to $BUILD" >&2
     exit 1
   fi
+
+  # A new download must have a NEW build code. Rebuilding the same code
+  # can produce a different debug signing certificate and break upgrades.
+  if [[ "$MODE" == "--install" ]] && (( BUILD == EXISTING_BUILD )); then
+    INSTALLED_SHA="$(php -r '$m=json_decode(file_get_contents($argv[1]),true); echo $m["sha256"] ?? "";' "$INFO")"
+    if [[ "$INSTALLED_SHA" =~ ^[a-f0-9]{64}$ && -f "$APK" ]] &&
+       printf '%s  %s\n' "$INSTALLED_SHA" "$APK" | sha256sum -c --status; then
+      echo "Build $BUILD already installed and verified; skipping same-build release."
+      exit 0
+    fi
+    echo "STOP: Same-build APK on server fails verification; manual repair required" >&2
+    exit 1
+  fi
 fi
 
 echo "Latest GitHub release: $TAG"
