@@ -17,6 +17,7 @@ import org.json.JSONObject;
 
 import java.util.Locale;
 import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 /**
  * Public, read-only APK update checker. The app never installs APKs silently:
@@ -30,7 +31,7 @@ final class AppUpdateHelper {
 
     private final Activity activity;
     private final ApiClient api;
-    private final ExecutorService io;
+    private final ExecutorService io = Executors.newSingleThreadExecutor();
     private final Handler main;
 
     private Button loginButton;
@@ -41,10 +42,9 @@ final class AppUpdateHelper {
     private long availableBuild;
     private String availableVersion = "";
 
-    AppUpdateHelper(Activity activity, ApiClient api, ExecutorService io, Handler main) {
+    AppUpdateHelper(Activity activity, ApiClient api, Handler main) {
         this.activity = activity;
         this.api = api;
-        this.io = io;
         this.main = main;
     }
 
@@ -65,6 +65,10 @@ final class AppUpdateHelper {
         banner.setOnClickListener(v -> showDownloadDialog());
         refreshControls();
         checkForUpdates(false);
+    }
+
+    void onDestroy() {
+        io.shutdownNow();
     }
 
     void onResume() {
