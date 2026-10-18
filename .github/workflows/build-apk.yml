@@ -34,7 +34,7 @@ jobs:
       - name: Verify bundled Nerdhalla unicorn logo
         run: |
           test -s app/src/main/res/drawable/nerdhalla_icon.webp
-          echo '9764e87addf7666d908da56c170df73dea9a07b2b38bf3a33347a720ceffb2a6  app/src/main/res/drawable/nerdhalla_icon.webp' | sha256sum -c -
+          echo 'd7bb17b3bc9f597f51d2633051b70d31e85b51a96fba2ab195dd303cd888987f  app/src/main/res/drawable/nerdhalla_icon.webp' | sha256sum -c -
           file app/src/main/res/drawable/nerdhalla_icon.webp
 
       - name: Set up Gradle
