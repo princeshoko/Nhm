@@ -1,0 +1,63 @@
+name: Import full-resolution original unicorn into Android
+
+on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/import-unicorn-hires.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: import-unicorn-hires
+  cancel-in-progress: false
+
+jobs:
+  import:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: true
+      - name: Retrieve and verify original full-resolution artwork
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl --fail --location --show-error --silent --retry 3 --max-time 90 \
+            'https://nerdhalla.net/nerdhalla-unicorn-import-20261018.webp' \
+            --output /tmp/nerdhalla-unicorn-full.webp
+          echo 'd7bb17b3bc9f597f51d2633051b70d31e85b51a96fba2ab195dd303cd888987f  /tmp/nerdhalla-unicorn-full.webp' | sha256sum -c
+          install -m 644 /tmp/nerdhalla-unicorn-full.webp app/src/main/res/drawable/nerdhalla_icon.webp
+          install -m 644 /tmp/nerdhalla-unicorn-full.webp branding/nerdhalla-logo.webp
+          file app/src/main/res/drawable/nerdhalla_icon.webp
+      - name: Update Android build verification to full-resolution asset
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('.github/workflows/build-apk.yml')
+          s=p.read_text()
+          old='9764e87addf7666d908da56c170df73dea9a07b2b38bf3a33347a720ceffb2a6'
+          new='d7bb17b3bc9f597f51d2633051b70d31e85b51a96fba2ab195dd303cd888987f'
+          if old not in s:
+              if new in s:
+                  print('Already points to high-resolution logo')
+                  raise SystemExit(0)
+              raise SystemExit('STOP: Unknown Android logo verification checksum')
+          p.write_text(s.replace(old,new))
+          PY
+      - name: Commit full-resolution artwork and verification
+        shell: bash
+        run: |
+          set -euo pipefail
+          if git diff --quiet -- app/src/main/res/drawable/nerdhalla_icon.webp branding/nerdhalla-logo.webp .github/workflows/build-apk.yml; then
+            echo 'Full-resolution logos already installed'
+            exit 0
+          fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -- app/src/main/res/drawable/nerdhalla_icon.webp branding/nerdhalla-logo.webp .github/workflows/build-apk.yml
+          git commit -m 'Bundle full-resolution original unicorn in Nerdhalla Android 2.5.22'
+          git push origin HEAD:main
