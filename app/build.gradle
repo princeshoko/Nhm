@@ -10,8 +10,20 @@ android {
         applicationId 'net.nerdhalla.sharla'
         minSdk 26
         targetSdk 35
-        versionCode 272
-        versionName '2.5.22'
+        versionCode 273
+        versionName '2.5.23'
+    }
+
+    signingConfigs {
+        nerdhallaRelease {
+            // The permanent PKCS#12 key is supplied from GitHub Actions secrets.
+            // Never commit the keystore, certificate's private key, or passwords.
+            storeFile file(System.getenv('NERDHALLA_KEYSTORE_FILE') ?: 'missing-release-keystore.p12')
+            storePassword System.getenv('NERDHALLA_KEYSTORE_PASSWORD')
+            keyAlias 'nerdhalla'
+            keyPassword System.getenv('NERDHALLA_KEYSTORE_PASSWORD')
+            storeType 'pkcs12'
+        }
     }
 
     buildTypes {
@@ -20,6 +32,7 @@ android {
         }
         release {
             minifyEnabled false
+            signingConfig signingConfigs.nerdhallaRelease
         }
     }
 }
