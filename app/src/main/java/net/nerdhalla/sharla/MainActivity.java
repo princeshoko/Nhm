@@ -161,7 +161,7 @@ public class MainActivity extends Activity {
         getWindow().setNavigationBarColor(BG);
 
         CookieManager.getInstance().setAcceptCookie(true);
-        appUpdates = new AppUpdateHelper(this, api, io, main);
+        appUpdates = new AppUpdateHelper(this, api, main);
 
         root = new FrameLayout(this);
         root.setBackgroundColor(BG);
@@ -7327,6 +7327,7 @@ public class MainActivity extends Activity {
     @Override
     protected void onDestroy() {
         main.removeCallbacks(challengesTicker);
+        if (appUpdates != null) appUpdates.onDestroy();
         io.shutdownNow();
         super.onDestroy();
     }
