@@ -455,7 +455,7 @@ public class MainActivity extends Activity {
         nativeRoot.setBackgroundColor(BG);
 
         nativeRoot.addView(buildAppBar(), new LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, dp(84)));
+                ViewGroup.LayoutParams.MATCH_PARENT, dp(110)));
 
         busy = new ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal);
         busy.setIndeterminate(true);
@@ -505,6 +505,7 @@ public class MainActivity extends Activity {
 
         LinearLayout labels = new LinearLayout(this);
         labels.setOrientation(LinearLayout.VERTICAL);
+        labels.setGravity(Gravity.CENTER_VERTICAL);
         labels.setPadding(dp(12), 0, 0, 0);
 
         labels.addView(text("NERDHALLA", 18, TEXT, true));
