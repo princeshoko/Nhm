@@ -2461,8 +2461,6 @@ public class MainActivity extends Activity {
         panels.setOrientation(sideBySide ? LinearLayout.HORIZONTAL : LinearLayout.VERTICAL);
 
         LinearLayout rideCard = card();
-        rideCard.addView(text("🐎 Ride Me", 0, TEXT, false),
-                new LinearLayout.LayoutParams(0, 0)); // No duplicated heading above the button.
         rideActionButton = primaryButton("🐎 Ride Me");
         rideActionButton.setEnabled(false);
         rideCard.addView(rideActionButton, new LinearLayout.LayoutParams(
@@ -2477,17 +2475,26 @@ public class MainActivity extends Activity {
             if (rideSubmitting || rideState == null || !rideState.optBoolean("ready", false)) return;
             rideSubmitting = true;
             updateRideClock();
-            post("ride", new JSONObject(), state -> {
-                rideSubmitting = false;
-                rideState = state;
-                rideStateFetchedAt = SystemClock.elapsedRealtime();
-                // Refresh balances and inventory from the authoritative portal.
-                meData = null;
-                loadMySharla();
-                if (state.optBoolean("played", false)) {
-                    toast("🐎 Ride complete!");
+            io.execute(() -> {
+                try {
+                    JSONObject state = api.api("ride", "POST", new JSONObject());
+                    main.post(() -> {
+                        rideSubmitting = false;
+                        rideState = state;
+                        rideStateFetchedAt = SystemClock.elapsedRealtime();
+                        meData = null;
+                        loadMySharla();
+                        if (state.optBoolean("played", false)) toast("🐎 Ride complete!");
+                        updateRideClock();
+                    });
+                } catch (Exception e) {
+                    main.post(() -> {
+                        rideSubmitting = false;
+                        toast(e.getMessage());
+                        loadRideState(true);
+                        updateRideClock();
+                    });
                 }
-                updateRideClock();
             });
         });
 
@@ -2572,13 +2579,13 @@ public class MainActivity extends Activity {
         }
         StringBuilder textResult = new StringBuilder(last.optBoolean("yes", false) ? "🐎 YES" : "🐴 NO");
         String saying = last.optString("saying", "");
-        if (!saying.isEmpty()) textResult.append("\\n\\n").append(saying);
+        if (!saying.isEmpty()) textResult.append("\n\n").append(saying);
         if (last.optBoolean("yes", false)) {
-            textResult.append("\\n\\n🪙 +").append(last.optInt("tokens", 0)).append(" Horse Tokens");
+            textResult.append("\n\n🪙 +").append(last.optInt("tokens", 0)).append(" Horse Tokens");
         } else {
             String itemName = last.optString("item_name", "");
             if (!itemName.isEmpty()) {
-                textResult.append("\\n\\nConsolation prize: ")
+                textResult.append("\n\nConsolation prize: ")
                         .append(last.optString("item_icon", ""))
                         .append(" ").append(itemName);
                 String rarity = last.optString("rarity", "");
