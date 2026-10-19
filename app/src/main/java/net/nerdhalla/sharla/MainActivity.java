@@ -128,6 +128,22 @@ public class MainActivity extends Activity {
     private long scheduleAtMillis = 0;
     private boolean authCheckRunning = false;
     private boolean appInForeground = false;
+    // Shared Discord/website Ride state; never calculate rewards on the device.
+    private JSONObject rideState;
+    private boolean rideLoading = false;
+    private boolean rideSubmitting = false;
+    private long rideStateFetchedAt = 0L;
+    private Button rideActionButton;
+    private TextView rideCountdown;
+    private TextView rideLastResult;
+    private final Runnable rideClock = new Runnable() {
+        @Override public void run() {
+            if (appInForeground && "my".equals(currentTop) && "shop".equals(currentMySection)) {
+                updateRideClock();
+            }
+            main.postDelayed(this, 1000L);
+        }
+    };
     private JSONObject challengesData;
     private boolean challengesLoading = false;
     private long challengesLastFetchElapsed = 0L;
@@ -162,6 +178,7 @@ public class MainActivity extends Activity {
 
         CookieManager.getInstance().setAcceptCookie(true);
         appUpdates = new AppUpdateHelper(this, api, main);
+        main.postDelayed(rideClock, 1000L);
 
         root = new FrameLayout(this);
         root.setBackgroundColor(BG);
@@ -2353,6 +2370,10 @@ public class MainActivity extends Activity {
                 ViewGroup.LayoutParams.WRAP_CONTENT));
         c.addView(hero, cardParams());
 
+        // A responsive two-card row directly above the existing Shop items.
+        c.addView(buildRideShopPanels(), cardParams());
+        loadRideState(false);
+
         JSONArray items = shop.optJSONArray("items");
         if (items == null || items.length() == 0) {
             c.addView(infoCard("Shop", "No shop items are available right now."));
@@ -2429,6 +2450,142 @@ public class MainActivity extends Activity {
         }
 
         return wrapScroll(c);
+    }
+
+
+    private View buildRideShopPanels() {
+        float widthDp = getResources().getDisplayMetrics().widthPixels
+                / getResources().getDisplayMetrics().density;
+        boolean sideBySide = widthDp >= 700f;
+        LinearLayout panels = new LinearLayout(this);
+        panels.setOrientation(sideBySide ? LinearLayout.HORIZONTAL : LinearLayout.VERTICAL);
+
+        LinearLayout rideCard = card();
+        rideCard.addView(text("🐎 Ride Me", 0, TEXT, false),
+                new LinearLayout.LayoutParams(0, 0)); // No duplicated heading above the button.
+        rideActionButton = primaryButton("🐎 Ride Me");
+        rideActionButton.setEnabled(false);
+        rideCard.addView(rideActionButton, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, dp(46)));
+        rideCountdown = text("Loading next ride…", 12, MUTED, false);
+        rideCountdown.setGravity(Gravity.CENTER);
+        LinearLayout.LayoutParams countdownParams = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        countdownParams.topMargin = dp(10);
+        rideCard.addView(rideCountdown, countdownParams);
+        rideActionButton.setOnClickListener(v -> {
+            if (rideSubmitting || rideState == null || !rideState.optBoolean("ready", false)) return;
+            rideSubmitting = true;
+            updateRideClock();
+            post("ride", new JSONObject(), state -> {
+                rideSubmitting = false;
+                rideState = state;
+                rideStateFetchedAt = SystemClock.elapsedRealtime();
+                // Refresh balances and inventory from the authoritative portal.
+                meData = null;
+                loadMySharla();
+                if (state.optBoolean("played", false)) {
+                    toast("🐎 Ride complete!");
+                }
+                updateRideClock();
+            });
+        });
+
+        LinearLayout resultCard = card();
+        resultCard.addView(text("Last Ride Result", 16, TEXT, true));
+        rideLastResult = text("Loading last ride…", 13, MUTED, false);
+        LinearLayout.LayoutParams resultParams = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        resultParams.topMargin = dp(8);
+        resultCard.addView(rideLastResult, resultParams);
+
+        if (sideBySide) {
+            LinearLayout.LayoutParams left = new LinearLayout.LayoutParams(
+                    0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
+            left.rightMargin = dp(8);
+            panels.addView(rideCard, left);
+            LinearLayout.LayoutParams right = new LinearLayout.LayoutParams(
+                    0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
+            right.leftMargin = dp(8);
+            panels.addView(resultCard, right);
+        } else {
+            panels.addView(rideCard, new LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+            LinearLayout.LayoutParams bottom = new LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+            bottom.topMargin = dp(12);
+            panels.addView(resultCard, bottom);
+        }
+        updateRideClock();
+        return panels;
+    }
+
+    private void loadRideState(boolean force) {
+        if (rideLoading || rideSubmitting) return;
+        if (!force && rideState != null &&
+                SystemClock.elapsedRealtime() - rideStateFetchedAt < 15000L) return;
+        rideLoading = true;
+        io.execute(() -> {
+            try {
+                JSONObject state = api.api("ride_status");
+                main.post(() -> {
+                    rideLoading = false;
+                    rideState = state;
+                    rideStateFetchedAt = SystemClock.elapsedRealtime();
+                    updateRideClock();
+                });
+            } catch (Exception e) {
+                main.post(() -> {
+                    rideLoading = false;
+                    if (rideCountdown != null) rideCountdown.setText("Ride unavailable: " + e.getMessage());
+                    if (rideActionButton != null) rideActionButton.setEnabled(false);
+                });
+            }
+        });
+    }
+
+    private void updateRideClock() {
+        if (rideActionButton == null || rideCountdown == null || rideLastResult == null) return;
+        if (rideState == null) {
+            rideActionButton.setEnabled(false);
+            return;
+        }
+        long elapsed = Math.max(0L, (SystemClock.elapsedRealtime() - rideStateFetchedAt) / 1000L);
+        long remaining = Math.max(0L, rideState.optLong("remaining_seconds", 0L) - elapsed);
+        boolean ready = remaining == 0L;
+        rideActionButton.setText(rideSubmitting ? "🐎 Riding…" : "🐎 Ride Me");
+        rideActionButton.setEnabled(ready && !rideSubmitting && !rideLoading);
+        if (ready) {
+            rideCountdown.setText("Ready to ride!");
+        } else {
+            long h = remaining / 3600L;
+            long m = (remaining % 3600L) / 60L;
+            long sec = remaining % 60L;
+            rideCountdown.setText(String.format(Locale.US,
+                    "Next ride in %02d:%02d:%02d", h, m, sec));
+        }
+
+        JSONObject last = rideState.optJSONObject("last");
+        if (last == null) {
+            rideLastResult.setText("No rides recorded yet.");
+            return;
+        }
+        StringBuilder textResult = new StringBuilder(last.optBoolean("yes", false) ? "🐎 YES" : "🐴 NO");
+        String saying = last.optString("saying", "");
+        if (!saying.isEmpty()) textResult.append("\\n\\n").append(saying);
+        if (last.optBoolean("yes", false)) {
+            textResult.append("\\n\\n🪙 +").append(last.optInt("tokens", 0)).append(" Horse Tokens");
+        } else {
+            String itemName = last.optString("item_name", "");
+            if (!itemName.isEmpty()) {
+                textResult.append("\\n\\nConsolation prize: ")
+                        .append(last.optString("item_icon", ""))
+                        .append(" ").append(itemName);
+                String rarity = last.optString("rarity", "");
+                if (!rarity.isEmpty()) textResult.append(" (").append(rarity).append(")");
+            }
+        }
+        rideLastResult.setText(textResult.toString());
     }
 
     private void applyShopPurchaseLocally(
@@ -6616,6 +6773,8 @@ public class MainActivity extends Activity {
                 api.setCsrfToken("");
                 session = null;
                 meData = null;
+                rideState = null;
+                rideStateFetchedAt = 0L;
                 meDataFetchedElapsed = 0L;
                 adminAccess = null;
                 guildData = null;
