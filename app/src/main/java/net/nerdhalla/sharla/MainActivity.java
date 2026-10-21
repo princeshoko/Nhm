@@ -598,6 +598,7 @@ public class MainActivity extends Activity {
         myNav.setOnClickListener(v -> {
             disposeDriveWebView();
             disposeWebmailWebView();
+            disposeVpnWebView();
             pendingMenuTransitionDirection = 0;
             currentTop = "my";
             titleText.setText("My Sharla");
@@ -609,6 +610,7 @@ public class MainActivity extends Activity {
             if (!adminButtonAllowed) return;
             disposeDriveWebView();
             disposeWebmailWebView();
+            disposeVpnWebView();
             pendingMenuTransitionDirection = 0;
             currentTop = "admin";
             titleText.setText("Sharla Admin");
@@ -805,6 +807,7 @@ public class MainActivity extends Activity {
         }
 
         disposeWebmailWebView();
+        disposeVpnWebView();
 
         LinearLayout outer = new LinearLayout(this);
         outer.setOrientation(LinearLayout.VERTICAL);
@@ -887,6 +890,20 @@ public class MainActivity extends Activity {
     }
 
 
+
+
+    private void disposeVpnWebView() {
+        if (vpnWebView != null) {
+            try {
+                vpnWebView.stopLoading();
+                vpnWebView.loadUrl("about:blank");
+                vpnWebView.setWebChromeClient(null);
+                vpnWebView.setWebViewClient(null);
+                vpnWebView.destroy();
+            } catch (Exception ignored) {}
+            vpnWebView = null;
+        }
+    }
 
     // The VPN dashboard is loaded inside the app with its existing authenticated
     // web session, CSRF protection, and Nerdhalla-only server-side role checks.
@@ -4348,6 +4365,7 @@ public class MainActivity extends Activity {
     }
 
     private void renderAdmin() {
+        disposeVpnWebView();
         LinearLayout outer = new LinearLayout(this);
         outer.setOrientation(LinearLayout.VERTICAL);
         outer.setBackgroundColor(BG);
@@ -6898,6 +6916,7 @@ public class MainActivity extends Activity {
             main.post(() -> {
                 disposeDriveWebView();
                 disposeWebmailWebView();
+                disposeVpnWebView();
                 api.setCsrfToken("");
                 session = null;
                 meData = null;
@@ -7679,6 +7698,7 @@ public class MainActivity extends Activity {
 
     @Override
     protected void onDestroy() {
+        disposeVpnWebView();
         main.removeCallbacks(challengesTicker);
         if (appUpdates != null) appUpdates.onDestroy();
         io.shutdownNow();
