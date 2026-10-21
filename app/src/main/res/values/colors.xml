@@ -1,7 +1,11 @@
 <resources>
-    <color name="nerdhalla_bg">#0B0811</color>
-    <color name="nerdhalla_bg2">#120C1C</color>
-    <color name="nerdhalla_panel">#171020</color>
-    <color name="nerdhalla_purple">#9B6CFF</color>
-    <color name="nerdhalla_text">#F5EFFF</color>
+    <color name="nerdhalla_bg">#090B17</color>
+    <color name="nerdhalla_bg2">#0D1122</color>
+    <color name="nerdhalla_panel">#13172A</color>
+    <color name="nerdhalla_panel_raised">#1B213A</color>
+    <color name="nerdhalla_border">#353A5B</color>
+    <color name="nerdhalla_button">#272D52</color>
+    <color name="nerdhalla_accent">#8294ED</color>
+    <color name="nerdhalla_text">#F3F4FF</color>
+    <color name="nerdhalla_muted">#ADB5D2</color>
 </resources>
