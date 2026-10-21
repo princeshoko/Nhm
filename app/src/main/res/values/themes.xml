@@ -4,7 +4,7 @@
         <item name="android:navigationBarColor">@color/nerdhalla_bg</item>
         <item name="android:statusBarColor">@color/nerdhalla_bg</item>
         <item name="android:windowLightStatusBar">false</item>
-        <item name="android:colorAccent">@color/nerdhalla_purple</item>
+        <item name="android:colorAccent">@color/nerdhalla_accent</item>
         <item name="android:windowBackground">@color/nerdhalla_bg</item>
     </style>
 </resources>
