@@ -944,6 +944,14 @@ public class MainActivity extends Activity {
         WebSettings options = web.getSettings();
         options.setJavaScriptEnabled(true);
         options.setDomStorageEnabled(true);
+        // Always fetch the current protected VPN dashboard and its search JS.
+        // Discord display names and VPN state must not be stale in the app.
+        options.setCacheMode(WebSettings.LOAD_NO_CACHE);
+        options.setUseWideViewPort(true);
+        options.setLoadWithOverviewMode(true);
+        options.setSupportZoom(true);
+        options.setBuiltInZoomControls(true);
+        options.setDisplayZoomControls(false);
         options.setAllowFileAccess(false);
         options.setAllowContentAccess(false);
         options.setSupportMultipleWindows(false);
@@ -977,8 +985,11 @@ public class MainActivity extends Activity {
         });
         page.addView(web, new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f));
-        reload.setOnClickListener(v -> web.reload());
-        web.loadUrl(BASE + "vpn.html");
+        reload.setOnClickListener(v -> {
+            web.stopLoading();
+            web.loadUrl(BASE + "vpn.html?app=1&refresh=" + System.currentTimeMillis());
+        });
+        web.loadUrl(BASE + "vpn.html?app=1&refresh=" + System.currentTimeMillis());
         return page;
     }
 
