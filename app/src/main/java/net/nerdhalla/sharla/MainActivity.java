@@ -75,14 +75,17 @@ public class MainActivity extends Activity {
     private static final int DRIVE_FILE_CHOOSER_REQUEST = 4107;
     private static final int WEBMAIL_FILE_CHOOSER_REQUEST = 4108;
 
-    private static final int BG = Color.rgb(11, 8, 17);
-    private static final int BG2 = Color.rgb(18, 12, 28);
-    private static final int PANEL = Color.rgb(23, 16, 32);
-    private static final int PANEL2 = Color.rgb(30, 21, 42);
-    private static final int LINE = Color.rgb(53, 35, 71);
-    private static final int TEXT = Color.rgb(245, 239, 255);
-    private static final int MUTED = Color.rgb(170, 160, 183);
-    private static final int PURPLE = Color.rgb(155, 108, 255);
+    // Match Nerdhalla's October 2026 dark-blue website theme.
+    // Keep rainbow brand lettering and collectible rarity colors unchanged.
+    private static final int BG = Color.rgb(9, 11, 23);            // #090b17
+    private static final int BG2 = Color.rgb(13, 17, 34);          // #0d1122
+    private static final int PANEL = Color.rgb(19, 23, 42);        // #13172a
+    private static final int PANEL2 = Color.rgb(27, 33, 58);      // dark-blue elevated surface
+    private static final int LINE = Color.rgb(53, 58, 91);         // #353a5b
+    private static final int TEXT = Color.rgb(243, 244, 255);      // #f3f4ff
+    private static final int MUTED = Color.rgb(173, 181, 210);     // #adb5d2
+    private static final int BLUE_ACCENT = Color.rgb(130, 148, 237); // #8294ed
+    private static final int BUTTON_BG = Color.rgb(39, 45, 82);    // #272d52
     private static final int GREEN = Color.rgb(111, 215, 168);
     private static final int GOLD = Color.rgb(228, 185, 93);
     private static final int RED = Color.rgb(225, 95, 105);
@@ -3511,7 +3514,7 @@ public class MainActivity extends Activity {
             bar.setMax(1000);
             bar.setProgress((int)Math.min(1000L, Math.round(1000.0 * progress / target)));
             bar.setProgressTintList(android.content.res.ColorStateList.valueOf(
-                    paid ? GREEN : finished ? GOLD : PURPLE));
+                    paid ? GREEN : finished ? GOLD : BLUE_ACCENT));
             bar.setProgressBackgroundTintList(
                     android.content.res.ColorStateList.valueOf(LINE));
             LinearLayout.LayoutParams barLayout = new LinearLayout.LayoutParams(
@@ -3884,7 +3887,7 @@ public class MainActivity extends Activity {
                 TextView progress = text(
                         progressText,
                         12,
-                        unlocked ? GREEN : PURPLE,
+                        unlocked ? GREEN : BLUE_ACCENT,
                         false);
                 progress.setPadding(0, dp(3), 0, 0);
                 itemCard.addView(progress);
@@ -6561,8 +6564,8 @@ public class MainActivity extends Activity {
 
         form.addView(mentionRow);
 
-        EditText color = edit("#4F46C8", false);
-        color.setText("#4F46C8");
+        EditText color = edit("#8294ED", false);
+        color.setText("#8294ED");
         EditText footer = edit("Footer (optional)", false);
 
         LinearLayout colorFooterRow = new LinearLayout(this);
@@ -6804,7 +6807,7 @@ public class MainActivity extends Activity {
                 b.put("channel_id", channels.get(pos).optString("id", ""));
                 b.put("title", title.getText().toString().trim());
                 b.put("markdown", body.getText().toString());
-                b.put("color", "#4F46C8");
+                b.put("color", "#8294ED");
                 b.put("image_url", "");
                 b.put("thumbnail_url", "");
                 b.put("footer", "");
@@ -7162,7 +7165,7 @@ public class MainActivity extends Activity {
         LinearLayout l = new LinearLayout(this);
         l.setOrientation(LinearLayout.VERTICAL);
         l.setPadding(0, dp(6), 0, dp(10));
-        l.addView(text(value, 28, PURPLE, true));
+        l.addView(text(value, 28, BLUE_ACCENT, true));
         l.addView(text(label, 12, MUTED, false));
         return l;
     }
@@ -7301,20 +7304,20 @@ public class MainActivity extends Activity {
         TextView t = text(label, 13, selected ? TEXT : MUTED, selected);
         t.setGravity(Gravity.CENTER);
         t.setPadding(dp(14), dp(9), dp(14), dp(9));
-        t.setBackground(roundRect(selected ? Color.rgb(55, 38, 78) : PANEL,
-                18, selected ? PURPLE : LINE, 1));
+        t.setBackground(roundRect(selected ? BUTTON_BG : PANEL,
+                18, selected ? BLUE_ACCENT : LINE, 1));
         return t;
     }
 
     private void styleSelected(TextView t, boolean selected) {
         t.setTextColor(selected ? TEXT : MUTED);
         t.setTypeface(Typeface.DEFAULT, selected ? Typeface.BOLD : Typeface.NORMAL);
-        t.setBackground(roundRect(selected ? Color.rgb(55, 38, 78) : Color.TRANSPARENT,
-                14, selected ? PURPLE : Color.TRANSPARENT, selected ? 1 : 0));
+        t.setBackground(roundRect(selected ? BUTTON_BG : Color.TRANSPARENT,
+                14, selected ? BLUE_ACCENT : Color.TRANSPARENT, selected ? 1 : 0));
     }
 
     private Button primaryButton(String label) {
-        return styledButton(label, PURPLE, TEXT);
+        return styledButton(label, BUTTON_BG, TEXT);
     }
 
     private Button secondaryButton(String label) {
@@ -7339,7 +7342,7 @@ public class MainActivity extends Activity {
     private EditText edit(String hint, boolean multiline) {
         EditText e = new EditText(this);
         e.setHint(hint);
-        e.setHintTextColor(Color.rgb(117, 107, 129));
+        e.setHintTextColor(Color.rgb(150, 161, 192));
         e.setTextColor(TEXT);
         e.setTextSize(15);
         e.setPadding(dp(12), dp(10), dp(12), dp(10));
@@ -7646,7 +7649,7 @@ public class MainActivity extends Activity {
         switch (rarity) {
             case "Mythic": return Color.rgb(244, 114, 182);
             case "Legendary": return GOLD;
-            case "Epic": return PURPLE;
+            case "Epic": return Color.rgb(155, 108, 255); // Epic rarity, not UI theme
             case "Rare": return Color.rgb(96, 165, 250);
             case "Uncommon": return GREEN;
             default: return TEXT;
