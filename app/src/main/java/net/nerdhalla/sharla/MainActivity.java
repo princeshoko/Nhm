@@ -103,6 +103,10 @@ public class MainActivity extends Activity {
     private LinearLayout bottomNav;
     private boolean adminButtonAllowed = false;
     private boolean driveTabAllowed = false;
+    private boolean vpnTabAllowed = false;
+    private boolean vpnAdminAllowed = false;
+    private WebView vpnWebView;
+    private static final String NERDHALLA_VPN_GUILD = "941088532586442762";
     private boolean webmailTabAllowed = false;
     private boolean driveBrowserOpen = false;
     private WebView driveWebView;
@@ -268,6 +272,7 @@ public class MainActivity extends Activity {
             if (meData == null) return;
             List<String> keys = list("profile", "shop", "homeworlds", "inventory", "achievements", "challenges");
             if (driveTabAllowed) keys.add("drive");
+            if (vpnTabAllowed) keys.add("vpn");
             if (webmailTabAllowed) keys.add("webmail");
             int current = keys.indexOf(currentMySection);
             if (current < 0) current = 0;
@@ -299,6 +304,7 @@ public class MainActivity extends Activity {
         if (hasPerm("member_lookup")) keys.add("members");
         if (hasPerm("homeworlds_admin")) keys.add("homeworlds");
         if (hasPerm("server_settings")) keys.add("settings");
+        if (vpnAdminAllowed && NERDHALLA_VPN_GUILD.equals(currentGuildId)) keys.add("vpn");
         if (isAdminOwner()) {
             keys.add("moderators");
             keys.add("backups");
@@ -747,11 +753,26 @@ public class MainActivity extends Activity {
                     canUseWebmail = false;
                 }
 
+                boolean canUseVpn = false;
+                boolean canManageVpn = false;
+                try {
+                    JSONObject vpn = api.api("vpn_status");
+                    canUseVpn = vpn.optBoolean("available", false)
+                            && vpn.optBoolean("eligible", false);
+                    canManageVpn = canUseVpn && vpn.optBoolean("admin", false);
+                } catch (Exception ignored) {
+                    // Fail closed; never reveal the VPN tab without live Nerdhalla authorization.
+                }
+
+                final boolean allowVpnTab = canUseVpn;
+                final boolean allowVpnAdmin = canManageVpn;
                 final boolean allowDriveTab = canUseDrive || driveStatusUnavailable;
                 final boolean allowWebmailTab = canUseWebmail;
                 main.post(() -> {
                     meData = d;
                     driveTabAllowed = allowDriveTab;
+                    vpnTabAllowed = allowVpnTab;
+                    vpnAdminAllowed = allowVpnAdmin;
                     webmailTabAllowed = allowWebmailTab;
                     if (!driveTabAllowed && "drive".equals(currentMySection)) {
                         currentMySection = "profile";
@@ -773,6 +794,9 @@ public class MainActivity extends Activity {
     }
 
     private void renderMySharla() {
+        if (!vpnTabAllowed && "vpn".equals(currentMySection)) {
+            currentMySection = "profile";
+        }
         if (!driveTabAllowed && "drive".equals(currentMySection)) {
             currentMySection = "profile";
         }
@@ -815,6 +839,9 @@ public class MainActivity extends Activity {
             case "webmail":
                 page = renderWebmailPage();
                 break;
+            case "vpn":
+                page = renderVpnPage();
+                break;
             default:
                 page = renderProfilePage();
         }
@@ -837,11 +864,13 @@ public class MainActivity extends Activity {
                 {"achievements", "🏆 Achievements"},
                 {"challenges", "🎯 Challenges"},
                 {"drive", "💾 Drive"},
-                {"webmail", "📫 Webmail"}
+                {"webmail", "📫 Webmail"},
+                {"vpn", "🛡️ VPN"}
         };
         for (String[] tab : tabs) {
             if ("drive".equals(tab[0]) && !driveTabAllowed) continue;
             if ("webmail".equals(tab[0]) && !webmailTabAllowed) continue;
+            if ("vpn".equals(tab[0]) && !vpnTabAllowed) continue;
             TextView b = chip(tab[1], tab[0].equals(currentMySection));
             b.setTag(tab[0]);
             b.setOnClickListener(v -> {
@@ -857,6 +886,81 @@ public class MainActivity extends Activity {
         return scroller;
     }
 
+
+
+    // The VPN dashboard is loaded inside the app with its existing authenticated
+    // web session, CSRF protection, and Nerdhalla-only server-side role checks.
+    // Opening a one-time private QR setup link uses the system browser so
+    // download/configuration handling works without exposing private keys here.
+    private View renderVpnPage() {
+        boolean adminPage = "admin".equals(currentTop);
+        if (!vpnTabAllowed || (adminPage &&
+                (!vpnAdminAllowed || !NERDHALLA_VPN_GUILD.equals(currentGuildId)))) {
+            LinearLayout unavailable = scrollColumn();
+            unavailable.addView(infoCard("VPN unavailable",
+                    "VPN access is limited to eligible Nerdhalla members."));
+            return wrapScroll(unavailable);
+        }
+
+        LinearLayout page = new LinearLayout(this);
+        page.setOrientation(LinearLayout.VERTICAL);
+        page.setBackgroundColor(BG);
+
+        LinearLayout bar = new LinearLayout(this);
+        bar.setGravity(Gravity.CENTER_VERTICAL);
+        bar.setOrientation(LinearLayout.HORIZONTAL);
+        bar.setPadding(dp(10), dp(7), dp(10), dp(7));
+        bar.setBackgroundColor(PANEL);
+        TextView label = text(adminPage ? "VPN Management" : "Nerdhalla VPN",
+                15, TEXT, true);
+        bar.addView(label, new LinearLayout.LayoutParams(0, dp(42), 1f));
+        Button reload = secondaryButton("↻");
+        bar.addView(reload, new LinearLayout.LayoutParams(dp(48), dp(42)));
+        page.addView(bar);
+
+        WebView web = new WebView(this);
+        vpnWebView = web;
+        web.setBackgroundColor(BG);
+        WebSettings options = web.getSettings();
+        options.setJavaScriptEnabled(true);
+        options.setDomStorageEnabled(true);
+        options.setAllowFileAccess(false);
+        options.setAllowContentAccess(false);
+        options.setSupportMultipleWindows(false);
+        options.setJavaScriptCanOpenWindowsAutomatically(false);
+        options.setMixedContentMode(WebSettings.MIXED_CONTENT_NEVER_ALLOW);
+        CookieManager.getInstance().setAcceptCookie(true);
+        web.setWebChromeClient(new WebChromeClient());
+        web.setWebViewClient(new WebViewClient() {
+            @Override
+            public void onPageFinished(WebView view, String url) {
+                super.onPageFinished(view, url);
+                stripWebsiteChromeForApp(view);
+            }
+
+            @Override
+            public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
+                Uri uri = request.getUrl();
+                String host = uri.getHost() == null ? "" : uri.getHost();
+                String path = uri.getPath() == null ? "" : uri.getPath();
+                if ("https".equalsIgnoreCase(uri.getScheme()) &&
+                        "nerdhalla.net".equalsIgnoreCase(host) &&
+                        "/vpn.html".equalsIgnoreCase(path)) {
+                    return false;
+                }
+                // Setup links are secrets: no WebView history or app logs.
+                if ("https".equalsIgnoreCase(uri.getScheme())) {
+                    openExternalUrl(uri.toString());
+                }
+                return true;
+            }
+        });
+        page.addView(web, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f));
+        reload.setOnClickListener(v -> web.reload());
+        web.loadUrl(BASE + "vpn.html");
+        return page;
+    }
 
     private View renderWebmailPage() {
         if (!webmailTabAllowed) {
@@ -4302,6 +4406,9 @@ public class MainActivity extends Activity {
             case "settings":
                 page = renderSettingsPage();
                 break;
+            case "vpn":
+                page = renderVpnPage();
+                break;
             case "announce":
                 page = renderAnnouncementPage();
                 break;
@@ -4369,6 +4476,8 @@ public class MainActivity extends Activity {
         addAdminTab(row, "members", "👤 Members", hasPerm("member_lookup"));
         addAdminTab(row, "homeworlds", "🎮 Homeworlds", hasPerm("homeworlds_admin"));
         addAdminTab(row, "settings", "⚙ Settings", hasPerm("server_settings"));
+        addAdminTab(row, "vpn", "🛡️ VPN Management",
+                vpnAdminAllowed && NERDHALLA_VPN_GUILD.equals(currentGuildId));
         addAdminTab(row, "moderators", "🛡 Moderator Access", isAdminOwner());
         addAdminTab(row, "backups", "💾 Backup & Restore", isAdminOwner());
 
@@ -6249,6 +6358,12 @@ public class MainActivity extends Activity {
         tagText.setText(settings.optString("tag_text", ""));
         EditText tagName = edit("Tag display name", false);
         tagName.setText(settings.optString("tag_name", ""));
+        EditText voteUrl = edit("https://top.gg/discord/servers/.../vote", false);
+        voteUrl.setText(settings.optString("topgg_vote_url", ""));
+        EditText voteTime = edit("18:30", false);
+        voteTime.setText(settings.optString("vote_reminder_time", "18:30"));
+        EditText voteTimezone = edit("America/Chicago", false);
+        voteTimezone.setText(settings.optString("vote_reminder_timezone", "America/Chicago"));
 
         LinearLayout settingsColumns = new LinearLayout(this);
         settingsColumns.setOrientation(LinearLayout.HORIZONTAL);
@@ -6288,6 +6403,9 @@ public class MainActivity extends Activity {
         form.addView(settingsColumns, new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.WRAP_CONTENT));
+        addField(form, "Top.gg voting URL (blank votes for Nerdhalla)", voteUrl);
+        addField(form, "Daily vote reminder time (HH:MM)", voteTime);
+        addField(form, "Time zone (e.g. America/Chicago)", voteTimezone);
 
         Switch rooms = switchRow("🏠 Personal Rooms", settings.optBoolean("rooms_enabled", false));
         Switch temp = switchRow("🔊 Temporary Voice", settings.optBoolean("voice_rooms_enabled", false));
@@ -6316,6 +6434,9 @@ public class MainActivity extends Activity {
                 fields.put("tag_role_id", selectedIdOrNull(tagRole));
                 fields.put("tag_text", tagText.getText().toString().trim());
                 fields.put("tag_name", tagName.getText().toString().trim());
+                fields.put("topgg_vote_url", voteUrl.getText().toString().trim());
+                fields.put("vote_reminder_time", voteTime.getText().toString().trim());
+                fields.put("vote_reminder_timezone", voteTimezone.getText().toString().trim());
                 fields.put("rooms_enabled", rooms.isChecked());
                 fields.put("voice_rooms_enabled", temp.isChecked());
                 fields.put("tag_system_enabled", tag.isChecked());
@@ -6803,6 +6924,8 @@ public class MainActivity extends Activity {
                 bottomNav = null;
                 adminButtonAllowed = false;
                 driveTabAllowed = false;
+                vpnTabAllowed = false;
+                vpnAdminAllowed = false;
                 webmailTabAllowed = false;
                 nativeRoot = null;
                 showLogin();
