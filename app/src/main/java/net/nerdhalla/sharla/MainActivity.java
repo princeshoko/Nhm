@@ -275,8 +275,8 @@ public class MainActivity extends Activity {
             if (meData == null) return;
             List<String> keys = list("profile", "shop", "homeworlds", "inventory", "achievements", "challenges");
             if (driveTabAllowed) keys.add("drive");
-            if (vpnTabAllowed) keys.add("vpn");
             if (webmailTabAllowed) keys.add("webmail");
+            if (vpnTabAllowed) keys.add("vpn");
             int current = keys.indexOf(currentMySection);
             if (current < 0) current = 0;
             int next = Math.floorMod(current + direction, keys.size());
