@@ -4,14 +4,14 @@ plugins {
 
 android {
     namespace 'net.nerdhalla.sharla'
-    compileSdk 35
+    compileSdk 36
 
     defaultConfig {
         applicationId 'net.nerdhalla.sharla'
         minSdk 26
-        targetSdk 35
-        versionCode 283
-        versionName '2.5.33'
+        targetSdk 36
+        versionCode 284
+        versionName '2.5.34'
     }
 
     signingConfigs {
