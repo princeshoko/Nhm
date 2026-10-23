@@ -1,6 +1,8 @@
 name: Build Google Play AAB
 
 on:
+  push:
+    branches: [ google-play-prep ]
   workflow_dispatch:
 
 permissions:
