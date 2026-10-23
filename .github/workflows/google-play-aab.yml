@@ -1,0 +1,86 @@
+name: Build Google Play AAB
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  play-bundle:
+    if: github.ref == 'refs/heads/google-play-prep'
+    runs-on: ubuntu-latest
+    env:
+      ANDROID_HOME: /usr/local/lib/android/sdk
+      ANDROID_SDK_ROOT: /usr/local/lib/android/sdk
+
+    steps:
+      - name: Checkout Play preparation branch
+        uses: actions/checkout@v4
+
+      - name: Set up Java 17
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Install Android SDK 36
+        run: |
+          yes | "$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager" --licenses >/dev/null || true
+          "$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager" "platforms;android-36" "build-tools;36.0.0" "platform-tools"
+
+      - name: Verify bundled logo
+        run: |
+          test -s app/src/main/res/drawable/nerdhalla_icon.webp
+          echo 'd7bb17b3bc9f597f51d2633051b70d31e85b51a96fba2ab195dd303cd888987f  app/src/main/res/drawable/nerdhalla_icon.webp' | sha256sum -c -
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.13'
+
+      - name: Verify permanent signing certificate
+        shell: bash
+        env:
+          NERDHALLA_KEYSTORE_B64: ${{ secrets.NERDHALLA_KEYSTORE_B64 }}
+          NERDHALLA_KEYSTORE_PASSWORD: ${{ secrets.NERDHALLA_KEYSTORE_PASSWORD }}
+        run: |
+          set -euo pipefail
+          if [[ -z "$NERDHALLA_KEYSTORE_B64" || -z "$NERDHALLA_KEYSTORE_PASSWORD" ]]; then
+            echo "::error::Missing release signing secrets."
+            exit 1
+          fi
+          KEYFILE="$RUNNER_TEMP/nerdhalla-release.p12"
+          umask 077
+          printf '%s' "$NERDHALLA_KEYSTORE_B64" | base64 --decode > "$KEYFILE"
+          chmod 600 "$KEYFILE"
+          CERT_SHA="$(openssl pkcs12 -in "$KEYFILE" -passin env:NERDHALLA_KEYSTORE_PASSWORD -clcerts -nokeys | openssl x509 -noout -fingerprint -sha256 | sed 's/.*=//;s/://g' | tr '[:upper:]' '[:lower:]')"
+          EXPECTED="a19dd27a5de82e5989d44c318e0a66b5ef2ea1e3fb43a76e90d49633f655eb35"
+          if [[ "$CERT_SHA" != "$EXPECTED" ]]; then
+            echo "::error::Unexpected signing certificate."
+            exit 1
+          fi
+          echo "NERDHALLA_KEYSTORE_FILE=$KEYFILE" >> "$GITHUB_ENV"
+          echo "Verified signing certificate."
+
+      - name: Build signed Android App Bundle
+        env:
+          NERDHALLA_KEYSTORE_PASSWORD: ${{ secrets.NERDHALLA_KEYSTORE_PASSWORD }}
+        run: gradle :app:bundleRelease --stacktrace
+
+      - name: Verify AAB signature and package configuration
+        shell: bash
+        run: |
+          set -euo pipefail
+          BUNDLE="app/build/outputs/bundle/release/app-release.aab"
+          test -s "$BUNDLE"
+          jarsigner -verify -strict "$BUNDLE"
+          unzip -p "$BUNDLE" base/manifest/AndroidManifest.xml >/dev/null
+          echo "Signed AAB created; not uploaded to Google Play."
+
+      - name: Upload Play bundle for review
+        uses: actions/upload-artifact@v4
+        with:
+          name: Nerdhalla-Google-Play-AAB-TEST
+          path: app/build/outputs/bundle/release/app-release.aab
+          if-no-files-found: error
