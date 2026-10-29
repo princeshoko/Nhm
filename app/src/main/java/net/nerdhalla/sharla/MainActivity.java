@@ -277,6 +277,7 @@ public class MainActivity extends Activity {
             if (driveTabAllowed) keys.add("drive");
             if (webmailTabAllowed) keys.add("webmail");
             if (vpnTabAllowed) keys.add("vpn");
+            keys.add("deletion");
             int current = keys.indexOf(currentMySection);
             if (current < 0) current = 0;
             int next = Math.floorMod(current + direction, keys.size());
@@ -848,6 +849,9 @@ public class MainActivity extends Activity {
             case "vpn":
                 page = renderVpnPage();
                 break;
+            case "deletion":
+                page = renderDeletionPage();
+                break;
             default:
                 page = renderProfilePage();
         }
@@ -871,7 +875,8 @@ public class MainActivity extends Activity {
                 {"challenges", "🎯 Challenges"},
                 {"drive", "💾 Drive"},
                 {"webmail", "📫 Webmail"},
-                {"vpn", "🛡️ VPN"}
+                {"vpn", "🛡️ VPN"},
+                {"deletion", "🗑️ Account Deletion"}
         };
         for (String[] tab : tabs) {
             if ("drive".equals(tab[0]) && !driveTabAllowed) continue;
@@ -990,6 +995,42 @@ public class MainActivity extends Activity {
             web.loadUrl(BASE + "vpn.html?app=1&refresh=" + System.currentTimeMillis());
         });
         web.loadUrl(BASE + "vpn.html?app=1&refresh=" + System.currentTimeMillis());
+        return page;
+    }
+
+    // Public account-deletion instructions shown within the native My Sharla menu.
+    private View renderDeletionPage() {
+        LinearLayout page = new LinearLayout(this);
+        page.setOrientation(LinearLayout.VERTICAL);
+        page.setBackgroundColor(BG);
+
+        WebView web = new WebView(this);
+        web.setBackgroundColor(BG);
+        web.getSettings().setJavaScriptEnabled(true);
+        web.getSettings().setDomStorageEnabled(true);
+        web.setWebViewClient(new WebViewClient() {
+            @Override
+            public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
+                Uri uri = request.getUrl();
+                String host = uri.getHost() == null ? "" : uri.getHost();
+                if ("https".equalsIgnoreCase(uri.getScheme()) &&
+                        ("nerdhalla.net".equalsIgnoreCase(host) ||
+                         "www.nerdhalla.net".equalsIgnoreCase(host))) {
+                    return false;
+                }
+                // Mail links may launch the device's chosen email application.
+                try {
+                    Intent intent = new Intent(Intent.ACTION_VIEW, uri);
+                    startActivity(intent);
+                } catch (Exception ignored) {
+                    toast("No application available to open this link.");
+                }
+                return true;
+            }
+        });
+        page.addView(web, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f));
+        web.loadUrl(BASE + "delete-account.html?app=1");
         return page;
     }
 
