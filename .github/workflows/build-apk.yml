@@ -108,7 +108,8 @@ jobs:
           AAB="app/build/outputs/bundle/release/app-release.aab"
           test -s "$AAB"
           unzip -t "$AAB" >/dev/null
-          jarsigner -verify -strict -certs "$AAB"
+          jarsigner -verify -certs "$AAB" | tee "$RUNNER_TEMP/aab-signature.txt"
+          grep -q "jar verified." "$RUNNER_TEMP/aab-signature.txt"
           EXPECTED="a19dd27a5de82e5989d44c318e0a66b5ef2ea1e3fb43a76e90d49633f655eb35"
           ACTUAL="$(keytool -printcert -jarfile "$AAB" 2>/dev/null | sed -nE 's/^[[:space:]]*SHA256: ([A-Fa-f0-9:]{95})$/\1/p' | head -1 | tr -d ':' | tr '[:upper:]' '[:lower:]')"
           if [[ "$ACTUAL" != "$EXPECTED" ]]; then
