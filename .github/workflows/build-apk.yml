@@ -1,4 +1,4 @@
-name: Build Android APK
+name: Build Android APK and Play App Bundle
 
 on:
   workflow_dispatch:
@@ -77,10 +77,10 @@ jobs:
           echo "NERDHALLA_KEYSTORE_FILE=$KEYFILE" >> "$GITHUB_ENV"
           echo "Permanent signing certificate verified."
 
-      - name: Build permanently signed release APK
+      - name: Build permanently signed release APK and Play App Bundle
         env:
           NERDHALLA_KEYSTORE_PASSWORD: ${{ secrets.NERDHALLA_KEYSTORE_PASSWORD }}
-        run: gradle :app:assembleRelease --stacktrace
+        run: gradle :app:assembleRelease :app:bundleRelease --stacktrace
 
       - name: Verify Android signing certificate and package
         shell: bash
@@ -100,6 +100,30 @@ jobs:
           "$ANDROID_SDK_ROOT/build-tools/35.0.0/aapt" dump badging "$APK" |
             grep -q "^package: name='net.nerdhalla.sharla' "
           echo "Verified permanent signer and application ID."
+
+      - name: Verify signed Google Play App Bundle
+        shell: bash
+        run: |
+          set -euo pipefail
+          AAB="app/build/outputs/bundle/release/app-release.aab"
+          test -s "$AAB"
+          unzip -t "$AAB" >/dev/null
+          jarsigner -verify -strict -certs "$AAB"
+          EXPECTED="a19dd27a5de82e5989d44c318e0a66b5ef2ea1e3fb43a76e90d49633f655eb35"
+          ACTUAL="$(keytool -printcert -jarfile "$AAB" 2>/dev/null | sed -nE 's/^[[:space:]]*SHA256: ([A-Fa-f0-9:]{95})$/\1/p' | head -1 | tr -d ':' | tr '[:upper:]' '[:lower:]')"
+          if [[ "$ACTUAL" != "$EXPECTED" ]]; then
+            echo "::error::App Bundle signing certificate mismatch."
+            exit 1
+          fi
+          unzip -Z1 "$AAB" | grep -qx 'base/manifest/AndroidManifest.xml'
+          echo "Signed Android App Bundle verified."
+
+      - name: Upload signed Google Play App Bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: Nerdhalla-Sharla-play-aab
+          path: app/build/outputs/bundle/release/app-release.aab
+          if-no-files-found: error
 
       - name: Upload signed APK artifact
         uses: actions/upload-artifact@v4
@@ -158,8 +182,10 @@ jobs:
           BUILD="$(python3 -c 'import json; print(json.load(open("apk-build.json"))["build"])')"
           TAG="apk-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
           cp app/build/outputs/apk/release/app-release.apk nerdhalla-latest.apk
+          cp app/build/outputs/bundle/release/app-release.aab nerdhalla-play.aab
           gh release create "$TAG" \
             nerdhalla-latest.apk \
+            nerdhalla-play.aab \
             apk-build.json \
             --target "$GITHUB_SHA" \
             --title "Nerdhalla Android $VERSION (signed build $BUILD)" \
