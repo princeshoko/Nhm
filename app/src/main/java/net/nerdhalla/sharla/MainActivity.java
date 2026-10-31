@@ -876,7 +876,7 @@ public class MainActivity extends Activity {
                 {"drive", "💾 Drive"},
                 {"webmail", "📫 Webmail"},
                 {"vpn", "🛡️ VPN"},
-                {"deletion", "🗑️ Account Deletion"}
+                {"deletion", "🗑️ Delete Account"}
         };
         for (String[] tab : tabs) {
             if ("drive".equals(tab[0]) && !driveTabAllowed) continue;
