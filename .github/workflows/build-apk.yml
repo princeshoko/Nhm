@@ -3,7 +3,7 @@ name: Build Android APK and Play App Bundle
 on:
   workflow_dispatch:
   push:
-    branches: [ main ]
+    branches: [ main, play-compliant-2.5.37 ]
     paths-ignore:
       - 'deploy/**'
 
