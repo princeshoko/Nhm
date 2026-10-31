@@ -80,13 +80,25 @@ jobs:
       - name: Build permanently signed release APK and Play App Bundle
         env:
           NERDHALLA_KEYSTORE_PASSWORD: ${{ secrets.NERDHALLA_KEYSTORE_PASSWORD }}
-        run: gradle :app:assembleRelease :app:bundleRelease --stacktrace
+        run: gradle :app:assembleWebsiteRelease :app:bundlePlayRelease --stacktrace
+
+      - name: Verify Play distribution excludes website updater
+        shell: bash
+        run: |
+          set -euo pipefail
+          AAB="app/build/outputs/bundle/playRelease/app-play-release.aab"
+          test -s "$AAB"
+          if unzip -p "$AAB" 'base/dex/*.dex' | strings | grep -F 'nerdhalla-latest.apk'; then
+            echo "::error::Website APK update URL found in Play bundle"
+            exit 1
+          fi
+          echo "Play bundle excludes website APK updater URL."
 
       - name: Verify Android signing certificate and package
         shell: bash
         run: |
           set -euo pipefail
-          APK="app/build/outputs/apk/release/app-release.apk"
+          APK="app/build/outputs/apk/website/release/app-website-release.apk"
           test -s "$APK"
           REPORT="$RUNNER_TEMP/apk-signature.txt"
           "$ANDROID_SDK_ROOT/build-tools/35.0.0/apksigner" verify --verbose --print-certs "$APK" > "$REPORT"
@@ -105,7 +117,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          AAB="app/build/outputs/bundle/release/app-release.aab"
+          AAB="app/build/outputs/bundle/playRelease/app-play-release.aab"
           test -s "$AAB"
           unzip -t "$AAB" >/dev/null
           jarsigner -verify -certs "$AAB" | tee "$RUNNER_TEMP/aab-signature.txt"
@@ -123,14 +135,14 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: Nerdhalla-Sharla-play-aab
-          path: app/build/outputs/bundle/release/app-release.aab
+          path: app/build/outputs/bundle/playRelease/app-play-release.aab
           if-no-files-found: error
 
       - name: Upload signed APK artifact
         uses: actions/upload-artifact@v4
         with:
           name: Nerdhalla-Sharla-signed-apk
-          path: app/build/outputs/apk/release/app-release.apk
+          path: app/build/outputs/apk/website/release/app-website-release.apk
           if-no-files-found: error
 
       - name: Prepare signed APK build metadata
@@ -145,7 +157,7 @@ jobs:
           import subprocess
           from pathlib import Path
 
-          source = Path("app/build/outputs/apk/release/app-release.apk")
+          source = Path("app/build/outputs/apk/website/release/app-website-release.apk")
           if not source.is_file() or source.stat().st_size < 50000:
               raise SystemExit("Signed release APK missing or implausibly small")
           aapt = Path(os.environ["ANDROID_SDK_ROOT"]) / "build-tools/35.0.0/aapt"
@@ -182,8 +194,8 @@ jobs:
           VERSION="$(python3 -c 'import json; print(json.load(open("apk-build.json"))["version"])')"
           BUILD="$(python3 -c 'import json; print(json.load(open("apk-build.json"))["build"])')"
           TAG="apk-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
-          cp app/build/outputs/apk/release/app-release.apk nerdhalla-latest.apk
-          cp app/build/outputs/bundle/release/app-release.aab nerdhalla-play.aab
+          cp app/build/outputs/apk/website/release/app-website-release.apk nerdhalla-latest.apk
+          cp app/build/outputs/bundle/playRelease/app-play-release.aab nerdhalla-play.aab
           gh release create "$TAG" \
             nerdhalla-latest.apk \
             nerdhalla-play.aab \
