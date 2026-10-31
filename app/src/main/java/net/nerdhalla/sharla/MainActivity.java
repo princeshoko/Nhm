@@ -184,7 +184,9 @@ public class MainActivity extends Activity {
         getWindow().setNavigationBarColor(BG);
 
         CookieManager.getInstance().setAcceptCookie(true);
-        appUpdates = new AppUpdateHelper(this, api, main);
+        if (!BuildConfig.FLAVOR.equals("play")) {
+            appUpdates = new AppUpdateHelper(this, api, main);
+        }
         main.postDelayed(rideClock, 1000L);
 
         root = new FrameLayout(this);
@@ -458,10 +460,10 @@ public class MainActivity extends Activity {
         LinearLayout.LayoutParams updateParams = new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, dp(46));
         updateParams.setMargins(dp(10), dp(14), dp(10), 0);
-        shell.addView(checkUpdates, updateParams);
+        if (appUpdates != null) shell.addView(checkUpdates, updateParams);
 
         root.addView(shell, match());
-        appUpdates.attachLogin(checkUpdates);
+        if (appUpdates != null) appUpdates.attachLogin(checkUpdates);
 
         TextView build = text(buildLabel(), 12, TEXT, true);
         build.setText(rainbowAll(buildLabel()));
@@ -495,7 +497,7 @@ public class MainActivity extends Activity {
         LinearLayout.LayoutParams updateBannerParams = new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, dp(42));
         updateBannerParams.setMargins(dp(10), dp(3), dp(10), dp(3));
-        nativeRoot.addView(updateBanner, updateBannerParams);
+        if (appUpdates != null) nativeRoot.addView(updateBanner, updateBannerParams);
 
         contentHost = new FrameLayout(this);
         contentHost.setBackgroundColor(BG);
@@ -506,7 +508,7 @@ public class MainActivity extends Activity {
                 ViewGroup.LayoutParams.MATCH_PARENT, dp(70)));
 
         root.addView(nativeRoot, match());
-        appUpdates.attachNative(checkUpdatesLink, updateBanner);
+        if (appUpdates != null) appUpdates.attachNative(checkUpdatesLink, updateBanner);
 
         currentTop = "my";
         adminButtonAllowed = false;
@@ -545,7 +547,7 @@ public class MainActivity extends Activity {
 
         checkUpdatesLink = text("Check for Updates ↻", 10, GREEN, true);
         checkUpdatesLink.setPadding(0, dp(2), 0, 0);
-        labels.addView(checkUpdatesLink);
+        if (appUpdates != null) labels.addView(checkUpdatesLink);
 
         bar.addView(labels, new LinearLayout.LayoutParams(0,
                 ViewGroup.LayoutParams.MATCH_PARENT, 1f));
