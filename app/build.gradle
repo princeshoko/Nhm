@@ -10,8 +10,14 @@ android {
         applicationId 'net.nerdhalla.sharla'
         minSdk 26
         targetSdk 36
-        versionCode 286
-        versionName '2.5.36'
+        versionCode 287
+        versionName '2.5.37'
+    }
+
+    flavorDimensions 'distribution'
+    productFlavors {
+        website { dimension 'distribution' }
+        play { dimension 'distribution' }
     }
 
     signingConfigs {
