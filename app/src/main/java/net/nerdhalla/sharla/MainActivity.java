@@ -454,6 +454,18 @@ public class MainActivity extends Activity {
             }
         });
 
+        Button reviewer = secondaryButton("Explore Reviewer Demo");
+        LinearLayout.LayoutParams reviewerParams = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, dp(46));
+        reviewerParams.setMargins(dp(10), dp(12), dp(10), 0);
+        shell.addView(reviewer, reviewerParams);
+        reviewer.setOnClickListener(v -> showReviewerDemo("profile"));
+
+        TextView demoNote = text("Read-only sample experience. No Discord account or member data.", 12, MUTED, false);
+        demoNote.setGravity(Gravity.CENTER);
+        demoNote.setPadding(dp(10), dp(8), dp(10), 0);
+        shell.addView(demoNote);
+
         Button checkUpdates = secondaryButton("Check for Updates");
         LinearLayout.LayoutParams updateParams = new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, dp(46));
@@ -472,6 +484,100 @@ public class MainActivity extends Activity {
                 Gravity.BOTTOM | Gravity.CENTER_HORIZONTAL);
         buildParams.bottomMargin = dp(14);
         root.addView(build, buildParams);
+    }
+
+    // Isolated preview for Google Play review. This method never calls the API,
+    // creates a Discord session, or loads member-controlled data.
+    private void showReviewerDemo(String section) {
+        root.removeAllViews();
+        nativeRoot = null;
+        LinearLayout shell = new LinearLayout(this);
+        shell.setOrientation(LinearLayout.VERTICAL);
+        shell.setBackgroundColor(BG);
+        shell.setPadding(dp(16), dp(18), dp(16), dp(16));
+
+        shell.addView(text("NERDHALLA  •  REVIEW DEMO", 19, TEXT, true));
+        TextView disclaimer = text(
+                "Read-only fictional examples. Discord sign-in is required for real community features.",
+                12, MUTED, false);
+        disclaimer.setPadding(0, dp(8), 0, dp(14));
+        shell.addView(disclaimer);
+
+        HorizontalScrollView tabs = new HorizontalScrollView(this);
+        LinearLayout tabRow = new LinearLayout(this);
+        tabRow.setOrientation(LinearLayout.HORIZONTAL);
+        String[][] sections = {
+                {"profile", "Profile"}, {"shop", "Shop"}, {"inventory", "Inventory"},
+                {"achievements", "Achievements"}, {"homeworlds", "Homeworlds"},
+                {"headpool", "Headpool"}
+        };
+        for (String[] item : sections) {
+            Button tab = secondaryButton(item[1]);
+            LinearLayout.LayoutParams p = new LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.WRAP_CONTENT, dp(46));
+            p.setMargins(0, 0, dp(6), 0);
+            tabRow.addView(tab, p);
+            tab.setOnClickListener(v -> showReviewerDemo(item[0]));
+        }
+        tabs.addView(tabRow);
+        shell.addView(tabs);
+
+        ScrollView scroll = new ScrollView(this);
+        LinearLayout cards = new LinearLayout(this);
+        cards.setOrientation(LinearLayout.VERTICAL);
+        cards.setPadding(0, dp(16), 0, dp(12));
+        String heading;
+        String description;
+        switch (section) {
+            case "shop":
+                heading = "Sharla Shop";
+                description = "Preview offers: Unicorn Saddle (Rare) — 25 Horse Tokens\\n"
+                        + "Cosmic Crate (Epic) — 75 Horse Tokens\\n"
+                        + "Purchases are disabled in review mode.";
+                break;
+            case "inventory":
+                heading = "Inventory";
+                description = "Demo Unicorn — Rare\\nPractice Sword — Common\\n"
+                        + "Starry Cloak — Epic\\nNo live inventory or account access.";
+                break;
+            case "achievements":
+                heading = "Achievements";
+                description = "First Steps — Bronze (Unlocked)\\n"
+                        + "Collector — Silver (Unlocked)\\n"
+                        + "Homeworld Explorer — Gold (Locked)\\n"
+                        + "Example achievements only.";
+                break;
+            case "homeworlds":
+                heading = "Homeworlds";
+                description = "A strategic game of stars, ships, and colors.\\n"
+                        + "Example: Red = attack, Yellow = movement, Green = build, Blue = trade.\\n"
+                        + "Live matchmaking and game actions require Discord login.";
+                break;
+            case "headpool":
+                heading = "Headpool";
+                description = "Discord game and moderation bot.\\n"
+                        + "Features include Homeworlds matchmaking, chess, stats, and commands.\\n"
+                        + "Live bot commands require Discord membership.";
+                break;
+            default:
+                heading = "Nerdhalla Reviewer";
+                description = "Title: Demo Adventurer\\nHorse Tokens: 125\\n"
+                        + "Race: Person\\nClass: Drama Llama\\n"
+                        + "This profile is fictional and cannot be edited.";
+        }
+        cards.addView(infoCard(heading, description));
+        cards.addView(infoCard("Demo restrictions",
+                "No admin controls, private member information, Drive, webmail, VPN credentials, "
+                        + "purchases, or live Discord actions are available."));
+        scroll.addView(cards);
+        shell.addView(scroll, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f));
+
+        Button exit = primaryButton("Return to Discord Login");
+        shell.addView(exit, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, dp(50)));
+        exit.setOnClickListener(v -> showLogin());
+        root.addView(shell, match());
     }
 
     private void showNativeApp() {
