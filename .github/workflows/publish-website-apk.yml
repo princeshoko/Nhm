@@ -1,0 +1,84 @@
+name: Publish Nerdhalla website APK (match Play build 291)
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/publish-website-apk.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  website-apk:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: 4f2576319d023a3f7285afdeb89e297f683df03f
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Android SDK
+        run: |
+          yes | /usr/local/lib/android/sdk/cmdline-tools/latest/bin/sdkmanager --licenses >/dev/null || true
+          /usr/local/lib/android/sdk/cmdline-tools/latest/bin/sdkmanager "platforms;android-36" "build-tools;35.0.0" "platform-tools"
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+      - name: Install verified signing certificate
+        shell: bash
+        env:
+          NERDHALLA_KEYSTORE_B64: ${{ secrets.NERDHALLA_KEYSTORE_B64 }}
+          NERDHALLA_KEYSTORE_PASSWORD: ${{ secrets.NERDHALLA_KEYSTORE_PASSWORD }}
+        run: |
+          set -euo pipefail
+          test -n "$NERDHALLA_KEYSTORE_B64"
+          test -n "$NERDHALLA_KEYSTORE_PASSWORD"
+          umask 077
+          KEYFILE="$RUNNER_TEMP/nerdhalla-release.p12"
+          printf '%s' "$NERDHALLA_KEYSTORE_B64" | base64 --decode > "$KEYFILE"
+          CERT_SHA="$(openssl pkcs12 -in "$KEYFILE" -passin env:NERDHALLA_KEYSTORE_PASSWORD -clcerts -nokeys | openssl x509 -noout -fingerprint -sha256 | sed 's/.*=//;s/://g' | tr '[:upper:]' '[:lower:]')"
+          test "$CERT_SHA" = a19dd27a5de82e5989d44c318e0a66b5ef2ea1e3fb43a76e90d49633f655eb35
+          echo "NERDHALLA_KEYSTORE_FILE=$KEYFILE" >> "$GITHUB_ENV"
+      - name: Build APK from exact Google Play source revision
+        env:
+          NERDHALLA_KEYSTORE_PASSWORD: ${{ secrets.NERDHALLA_KEYSTORE_PASSWORD }}
+        run: gradle :app:assembleRelease --stacktrace
+      - name: Verify release APK and generate matching website metadata
+        shell: bash
+        env:
+          ANDROID_SDK_ROOT: /usr/local/lib/android/sdk
+        run: |
+          set -euo pipefail
+          APK=app/build/outputs/apk/release/app-release.apk
+          test -s "$APK"
+          "$ANDROID_SDK_ROOT/build-tools/35.0.0/apksigner" verify --verbose --print-certs "$APK" > /tmp/apk-signature.txt
+          grep -Eq '^Verified using v2 scheme .*: true$' /tmp/apk-signature.txt
+          grep -qi 'Signer #1 certificate SHA-256 digest: a19dd27a5de82e5989d44c318e0a66b5ef2ea1e3fb43a76e90d49633f655eb35' /tmp/apk-signature.txt
+          "$ANDROID_SDK_ROOT/build-tools/35.0.0/aapt" dump badging "$APK" | grep -q "^package: name='net.nerdhalla.sharla' versionCode='291' versionName='2.5.41'"
+          cp "$APK" nerdhalla-latest.apk
+          python3 - <<'PY'
+          import hashlib,json,pathlib
+          p=pathlib.Path('nerdhalla-latest.apk')
+          d={'build':291,'version':'2.5.41','build_type':'release','signing_cert_sha256':'a19dd27a5de82e5989d44c318e0a66b5ef2ea1e3fb43a76e90d49633f655eb35','sha256':hashlib.sha256(p.read_bytes()).hexdigest(),'size_bytes':p.stat().st_size,'source_sha':'4f2576319d023a3f7285afdeb89e297f683df03f'}
+          pathlib.Path('apk-build.json').write_text(json.dumps(d,indent=2)+'\n')
+          print(json.dumps(d,indent=2))
+          PY
+      - name: Publish website APK release for Hydra sync
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          if gh release view website-apk-291 >/dev/null 2>&1; then
+            echo "Release website-apk-291 already exists. Refusing to overwrite."
+            exit 1
+          fi
+          gh release create website-apk-291 nerdhalla-latest.apk apk-build.json \
+            --repo "$GITHUB_REPOSITORY" \
+            --target 4f2576319d023a3f7285afdeb89e297f683df03f \
+            --title "Nerdhalla website APK 2.5.41 (build 291)" \
+            --notes "Signed website APK built from the exact source revision used for the successfully published Google Play Internal testing AAB, build 291." \
+            --latest
