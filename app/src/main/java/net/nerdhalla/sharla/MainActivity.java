@@ -454,13 +454,6 @@ public class MainActivity extends Activity {
             }
         });
 
-        Button reviewer = secondaryButton("Reviewer");
-        LinearLayout.LayoutParams reviewerParams = new LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, dp(46));
-        reviewerParams.setMargins(dp(10), dp(12), dp(10), 0);
-        shell.addView(reviewer, reviewerParams);
-        reviewer.setOnClickListener(v -> showReviewerDemo("profile"));
-
         root.addView(shell, match());
 
         TextView build = text(buildLabel(), 12, TEXT, true);
