@@ -10,8 +10,8 @@ android {
         applicationId 'net.nerdhalla.sharla'
         minSdk 26
         targetSdk 36
-        versionCode 290
-        versionName '2.5.40'
+        versionCode 291
+        versionName '2.5.41'
     }
 
     signingConfigs {
