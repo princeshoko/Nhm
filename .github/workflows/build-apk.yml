@@ -8,7 +8,7 @@ on:
       - 'deploy/**'
 
 permissions:
-  contents: write
+  contents: read
 
 concurrency:
   group: nerdhalla-apk-${{ github.ref }}
@@ -77,29 +77,10 @@ jobs:
           echo "NERDHALLA_KEYSTORE_FILE=$KEYFILE" >> "$GITHUB_ENV"
           echo "Permanent signing certificate verified."
 
-      - name: Build permanently signed release APK and Play App Bundle
+      - name: Build permanently signed Google Play App Bundle
         env:
           NERDHALLA_KEYSTORE_PASSWORD: ${{ secrets.NERDHALLA_KEYSTORE_PASSWORD }}
-        run: gradle :app:assembleRelease :app:bundleRelease --stacktrace
-
-      - name: Verify Android signing certificate and package
-        shell: bash
-        run: |
-          set -euo pipefail
-          APK="app/build/outputs/apk/release/app-release.apk"
-          test -s "$APK"
-          REPORT="$RUNNER_TEMP/apk-signature.txt"
-          "$ANDROID_SDK_ROOT/build-tools/35.0.0/apksigner" verify --verbose --print-certs "$APK" > "$REPORT"
-          grep -Eq '^Verified using v2 scheme .*: true$' "$REPORT"
-          SIGNER="$(sed -nE 's/^Signer #1 certificate SHA-256 digest: ([a-fA-F0-9]{64})$/\1/p' "$REPORT" | tr '[:upper:]' '[:lower:]')"
-          EXPECTED="a19dd27a5de82e5989d44c318e0a66b5ef2ea1e3fb43a76e90d49633f655eb35"
-          if [[ "$SIGNER" != "$EXPECTED" ]]; then
-            echo "::error::Release APK is signed with an unexpected certificate."
-            exit 1
-          fi
-          "$ANDROID_SDK_ROOT/build-tools/35.0.0/aapt" dump badging "$APK" |
-            grep -q "^package: name='net.nerdhalla.sharla' "
-          echo "Verified permanent signer and application ID."
+        run: gradle :app:bundleRelease --stacktrace
 
       - name: Verify signed Google Play App Bundle
         shell: bash
@@ -126,69 +107,3 @@ jobs:
           path: app/build/outputs/bundle/release/app-release.aab
           if-no-files-found: error
 
-      - name: Upload signed APK artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: Nerdhalla-Sharla-signed-apk
-          path: app/build/outputs/apk/release/app-release.apk
-          if-no-files-found: error
-
-      - name: Prepare signed APK build metadata
-        shell: bash
-        run: |
-          set -euo pipefail
-          python3 - <<'PY'
-          import hashlib
-          import json
-          import os
-          import re
-          import subprocess
-          from pathlib import Path
-
-          source = Path("app/build/outputs/apk/release/app-release.apk")
-          if not source.is_file() or source.stat().st_size < 50000:
-              raise SystemExit("Signed release APK missing or implausibly small")
-          aapt = Path(os.environ["ANDROID_SDK_ROOT"]) / "build-tools/35.0.0/aapt"
-          result = subprocess.check_output([str(aapt), "dump", "badging", str(source)], text=True)
-          package = next((line for line in result.splitlines() if line.startswith("package:")), "")
-          code = re.search(r"versionCode='([0-9]+)'", package)
-          name = re.search(r"versionName='([^']+)'", package)
-          if not code or not name or "name='net.nerdhalla.sharla'" not in package:
-              raise SystemExit("Unable to verify APK application ID / build / version")
-          data = {
-              "build": int(code.group(1)),
-              "version": name.group(1),
-              "build_type": "release",
-              "signing_cert_sha256": "a19dd27a5de82e5989d44c318e0a66b5ef2ea1e3fb43a76e90d49633f655eb35",
-              "sha256": hashlib.sha256(source.read_bytes()).hexdigest(),
-              "size_bytes": source.stat().st_size,
-              "run_id": int(os.environ["GITHUB_RUN_ID"]),
-              "run_attempt": int(os.environ["GITHUB_RUN_ATTEMPT"]),
-              "source_sha": os.environ["GITHUB_SHA"]
-          }
-          Path("apk-build.json").write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
-          print(json.dumps(data, indent=2))
-          PY
-
-      # Hydra downloads public releases. It never needs SSH credentials or an
-      # incoming webhook, and failed/unsigned builds cannot replace its APK.
-      - name: Publish signed APK release
-        if: github.ref == 'refs/heads/main'
-        shell: bash
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          set -euo pipefail
-          VERSION="$(python3 -c 'import json; print(json.load(open("apk-build.json"))["version"])')"
-          BUILD="$(python3 -c 'import json; print(json.load(open("apk-build.json"))["build"])')"
-          TAG="apk-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
-          cp app/build/outputs/apk/release/app-release.apk nerdhalla-latest.apk
-          cp app/build/outputs/bundle/release/app-release.aab nerdhalla-play.aab
-          gh release create "$TAG" \
-            nerdhalla-latest.apk \
-            nerdhalla-play.aab \
-            apk-build.json \
-            --target "$GITHUB_SHA" \
-            --title "Nerdhalla Android $VERSION (signed build $BUILD)" \
-            --notes "Nerdhalla permanently signed Android APK. Signing certificate SHA-256: a19dd27a5de82e5989d44c318e0a66b5ef2ea1e3fb43a76e90d49633f655eb35" \
-            --latest
