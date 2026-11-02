@@ -91,7 +91,7 @@ public class MainActivity extends Activity {
     private static final int RED = Color.rgb(225, 95, 105);
 
     private final ApiClient api = new ApiClient();
-    private final ExecutorService io = Executors.newSingleThreadExecutor();
+    private final ExecutorService io = Executors.newFixedThreadPool(5);
     private final Handler main = new Handler(Looper.getMainLooper());
     private AppUpdateHelper appUpdates;
     private TextView checkUpdatesLink;
@@ -592,8 +592,8 @@ public class MainActivity extends Activity {
         driveTabAllowed = false;
         webmailTabAllowed = false;
         updateBottomNav();
-        checkAdminButtonAccess();
         loadMySharla();
+        checkAdminButtonAccess();
     }
 
     private View buildAppBar() {
@@ -809,61 +809,16 @@ public class MainActivity extends Activity {
             return;
         }
         showBusy(true);
+        // Profile is the critical path. Optional services must never block it.
         io.execute(() -> {
             try {
                 JSONObject d = api.api("me");
-                boolean canUseDrive = false;
-                boolean driveStatusUnavailable = false;
-                try {
-                    JSONObject driveStatus = api.api("drive");
-                    // A previously created Drive still deserves a visible status page.
-                    // The server remains responsible for enforcing role permissions.
-                    canUseDrive = driveStatus.optBoolean("eligible", false)
-                            || driveStatus.optBoolean("has_drive", false);
-                } catch (Exception ignored) {
-                    // Never hide the Drive tab solely because a network check failed.
-                    // Opening it will retry the server's authorization check.
-                    driveStatusUnavailable = true;
-                }
-
-                boolean canUseWebmail = false;
-                try {
-                    JSONObject emailStatus = api.api("email_eligibility");
-                    canUseWebmail = emailStatus.optBoolean("eligible", false);
-                } catch (Exception ignored) {
-                    canUseWebmail = false;
-                }
-
-                boolean canUseVpn = false;
-                boolean canManageVpn = false;
-                try {
-                    JSONObject vpn = api.api("vpn_status");
-                    canUseVpn = vpn.optBoolean("available", false)
-                            && vpn.optBoolean("eligible", false);
-                    canManageVpn = canUseVpn && vpn.optBoolean("admin", false);
-                } catch (Exception ignored) {
-                    // Fail closed; never reveal the VPN tab without live Nerdhalla authorization.
-                }
-
-                final boolean allowVpnTab = canUseVpn;
-                final boolean allowVpnAdmin = canManageVpn;
-                final boolean allowDriveTab = canUseDrive || driveStatusUnavailable;
-                final boolean allowWebmailTab = canUseWebmail;
                 main.post(() -> {
                     meData = d;
-                    driveTabAllowed = allowDriveTab;
-                    vpnTabAllowed = allowVpnTab;
-                    vpnAdminAllowed = allowVpnAdmin;
-                    webmailTabAllowed = allowWebmailTab;
-                    if (!driveTabAllowed && "drive".equals(currentMySection)) {
-                        currentMySection = "profile";
-                    }
-                    if (!webmailTabAllowed && "webmail".equals(currentMySection)) {
-                        currentMySection = "profile";
-                    }
                     meDataFetchedElapsed = SystemClock.elapsedRealtime();
                     showBusy(false);
                     renderMySharla();
+                    loadMySharlaEntitlements();
                 });
             } catch (Exception e) {
                 main.post(() -> {
@@ -872,6 +827,74 @@ public class MainActivity extends Activity {
                 });
             }
         });
+    }
+
+    private void loadMySharlaEntitlements() {
+        // Check each service independently. Errors never expose protected data:
+        // all service endpoints still enforce authorization on the server.
+        io.execute(() -> {
+            boolean eligible = false;
+            boolean unavailable = false;
+            try {
+                JSONObject status = api.api("drive");
+                eligible = status.optBoolean("eligible", false)
+                        || status.optBoolean("has_drive", false);
+            } catch (Exception ignored) {
+                // Preserve the existing fallback to let the Drive page retry.
+                unavailable = true;
+            }
+            final boolean show = eligible || unavailable;
+            main.post(() -> {
+                if (driveTabAllowed != show) {
+                    driveTabAllowed = show;
+                    refreshMyTabsAfterEntitlement();
+                }
+            });
+        });
+        io.execute(() -> {
+            boolean eligible = false;
+            try {
+                eligible = api.api("email_eligibility").optBoolean("eligible", false);
+            } catch (Exception ignored) {
+                // A failed check must not grant Webmail access.
+            }
+            final boolean show = eligible;
+            main.post(() -> {
+                if (webmailTabAllowed != show) {
+                    webmailTabAllowed = show;
+                    refreshMyTabsAfterEntitlement();
+                }
+            });
+        });
+        io.execute(() -> {
+            boolean available = false;
+            boolean admin = false;
+            try {
+                JSONObject vpn = api.api("vpn_status");
+                available = vpn.optBoolean("available", false)
+                        && vpn.optBoolean("eligible", false);
+                admin = available && vpn.optBoolean("admin", false);
+            } catch (Exception ignored) {
+                // VPN stays hidden unless explicitly authorized.
+            }
+            final boolean show = available;
+            final boolean manage = admin;
+            main.post(() -> {
+                if (vpnTabAllowed != show || vpnAdminAllowed != manage) {
+                    vpnTabAllowed = show;
+                    vpnAdminAllowed = manage;
+                    refreshMyTabsAfterEntitlement();
+                }
+            });
+        });
+    }
+
+    private void refreshMyTabsAfterEntitlement() {
+        // Avoid destroying an active Drive, Webmail, or VPN WebView.
+        if ("my".equals(currentTop) && "profile".equals(currentMySection)
+                && meData != null && contentHost != null) {
+            renderMySharla();
+        }
     }
 
     private void renderMySharla() {
