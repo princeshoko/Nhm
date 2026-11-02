@@ -1,0 +1,69 @@
+name: Publish Nerdhalla AAB to Google Play Internal testing
+
+on:
+  workflow_run:
+    workflows: ["Build Android APK and Play App Bundle"]
+    types: [completed]
+  workflow_dispatch:
+    inputs:
+      run_id:
+        description: "Successful Nerdhalla build workflow run ID to publish"
+        required: true
+        type: string
+
+permissions:
+  actions: read
+  contents: read
+
+concurrency:
+  group: nerdhalla-google-play-internal
+  cancel-in-progress: false
+
+jobs:
+  publish-internal:
+    # Fail closed: only publish when explicitly enabled, only main builds,
+    # never on a failed build or non-main branch.
+    if: >-
+      vars.NERDHALLA_PLAY_UPLOAD_ENABLED == 'true' &&
+      (github.event_name == 'workflow_dispatch' ||
+       (github.event.workflow_run.conclusion == 'success' &&
+        github.event.workflow_run.head_branch == 'main'))
+    runs-on: ubuntu-latest
+    steps:
+      - name: Select successful signed build
+        id: select
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TARGET_RUN: ${{ github.event.inputs.run_id || github.event.workflow_run.id }}
+        run: |
+          set -euo pipefail
+          [[ "$TARGET_RUN" =~ ^[0-9]+$ ]]
+          STATUS="$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$TARGET_RUN" --jq '.conclusion')"
+          BRANCH="$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$TARGET_RUN" --jq '.head_branch')"
+          WORKFLOW="$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$TARGET_RUN" --jq '.name')"
+          test "$STATUS" = success
+          test "$BRANCH" = main
+          test "$WORKFLOW" = "Build Android APK and Play App Bundle"
+          echo "run_id=$TARGET_RUN" >> "$GITHUB_OUTPUT"
+
+      - name: Download signed AAB from successful build
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TARGET_RUN: ${{ steps.select.outputs.run_id }}
+        run: |
+          set -euo pipefail
+          mkdir -p play-aab
+          gh run download "$TARGET_RUN" --repo "$GITHUB_REPOSITORY" \
+            --name Nerdhalla-Sharla-play-aab --dir play-aab
+          test -s play-aab/app-release.aab
+          unzip -t play-aab/app-release.aab >/dev/null
+
+      - name: Publish AAB to Internal testing only
+        uses: r0adkll/upload-google-play@v1
+        with:
+          serviceAccountJsonPlainText: ${{ secrets.NERDHALLA_GOOGLE_PLAY_SERVICE_ACCOUNT_JSON }}
+          packageName: net.nerdhalla.sharla
+          releaseFiles: play-aab/app-release.aab
+          tracks: internal
+          status: completed
