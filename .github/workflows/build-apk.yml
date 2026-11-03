@@ -6,9 +6,10 @@ on:
     branches: [ main ]
     paths-ignore:
       - 'deploy/**'
+      - '.github/workflows/**'
 
 permissions:
-  contents: read
+  contents: write
 
 concurrency:
   group: nerdhalla-apk-${{ github.ref }}
@@ -80,7 +81,47 @@ jobs:
       - name: Build permanently signed Google Play App Bundle
         env:
           NERDHALLA_KEYSTORE_PASSWORD: ${{ secrets.NERDHALLA_KEYSTORE_PASSWORD }}
-        run: gradle :app:bundleRelease --stacktrace
+        run: gradle :app:assembleRelease :app:bundleRelease --stacktrace
+
+      - name: Verify signed website APK
+        shell: bash
+        run: |
+          set -euo pipefail
+          APK="app/build/outputs/apk/release/app-release.apk"
+          test -s "$APK"
+          REPORT="$RUNNER_TEMP/apk-signature.txt"
+          "$ANDROID_SDK_ROOT/build-tools/35.0.0/apksigner" verify --verbose --print-certs "$APK" > "$REPORT"
+          grep -Eq '^Verified using v2 scheme .*: true
+        shell: bash
+        run: |
+          set -euo pipefail
+          AAB="app/build/outputs/bundle/release/app-release.aab"
+          test -s "$AAB"
+          unzip -t "$AAB" >/dev/null
+          jarsigner -verify -certs "$AAB" | tee "$RUNNER_TEMP/aab-signature.txt"
+          grep -q "jar verified." "$RUNNER_TEMP/aab-signature.txt"
+          EXPECTED="a19dd27a5de82e5989d44c318e0a66b5ef2ea1e3fb43a76e90d49633f655eb35"
+          ACTUAL="$(keytool -printcert -jarfile "$AAB" 2>/dev/null | sed -nE 's/^[[:space:]]*SHA256: ([A-Fa-f0-9:]{95})$/\1/p' | head -1 | tr -d ':' | tr '[:upper:]' '[:lower:]')"
+          if [[ "$ACTUAL" != "$EXPECTED" ]]; then
+            echo "::error::App Bundle signing certificate mismatch."
+            exit 1
+          fi
+          unzip -Z1 "$AAB" | grep -qx 'base/manifest/AndroidManifest.xml'
+          echo "Signed Android App Bundle verified."
+
+      - name: Upload signed Google Play App Bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: Nerdhalla-Sharla-play-aab
+          path: app/build/outputs/bundle/release/app-release.aab
+          if-no-files-found: error
+
+ "$REPORT"
+          EXPECTED="a19dd27a5de82e5989d44c318e0a66b5ef2ea1e3fb43a76e90d49633f655eb35"
+          SIGNER="$(sed -nE 's/^Signer #1 certificate SHA-256 digest: ([a-fA-F0-9]{64})$/\1/p' "$REPORT" | tr '[:upper:]' '[:lower:]')"
+          test "$SIGNER" = "$EXPECTED"
+          "$ANDROID_SDK_ROOT/build-tools/35.0.0/aapt" dump badging "$APK" | grep -q "^package: name='net.nerdhalla.sharla' "
+          echo "Signed website APK verified."
 
       - name: Verify signed Google Play App Bundle
         shell: bash
@@ -107,3 +148,55 @@ jobs:
           path: app/build/outputs/bundle/release/app-release.aab
           if-no-files-found: error
 
+
+
+      - name: Prepare website APK release metadata
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import hashlib, json, os, re, subprocess
+          from pathlib import Path
+          apk = Path("app/build/outputs/apk/release/app-release.apk")
+          aapt = Path(os.environ["ANDROID_SDK_ROOT"]) / "build-tools/35.0.0/aapt"
+          output = subprocess.check_output([str(aapt),"dump","badging",str(apk)],text=True)
+          line = next((x for x in output.splitlines() if x.startswith("package:")), "")
+          code = re.search(r"versionCode='([0-9]+)'", line)
+          name = re.search(r"versionName='([^']+)'", line)
+          if "name='net.nerdhalla.sharla'" not in line or not code or not name:
+              raise SystemExit("Invalid app package or version")
+          metadata = {
+              "build": int(code.group(1)),
+              "version": name.group(1),
+              "build_type": "release",
+              "signing_cert_sha256": "a19dd27a5de82e5989d44c318e0a66b5ef2ea1e3fb43a76e90d49633f655eb35",
+              "sha256": hashlib.sha256(apk.read_bytes()).hexdigest(),
+              "size_bytes": apk.stat().st_size,
+              "run_id": int(os.environ["GITHUB_RUN_ID"]),
+              "run_attempt": int(os.environ["GITHUB_RUN_ATTEMPT"]),
+              "source_sha": os.environ["GITHUB_SHA"]
+          }
+          Path("apk-build.json").write_text(json.dumps(metadata,indent=2)+"\\n")
+          print(json.dumps(metadata,indent=2))
+          PY
+
+      # Hydra's existing APK sync script downloads the newest GitHub release.
+      # No SSH credentials or write access to Hydra are required in Actions.
+      - name: Publish signed APK and AAB to GitHub Releases
+        if: github.ref == 'refs/heads/main'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          VERSION="$(python3 -c 'import json; print(json.load(open("apk-build.json"))["version"])')"
+          BUILD="$(python3 -c 'import json; print(json.load(open("apk-build.json"))["build"])')"
+          TAG="apk-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          cp app/build/outputs/apk/release/app-release.apk nerdhalla-latest.apk
+          cp app/build/outputs/bundle/release/app-release.aab nerdhalla-play.aab
+          gh release create "$TAG" \
+            nerdhalla-latest.apk nerdhalla-play.aab apk-build.json \
+            --target "$GITHUB_SHA" \
+            --title "Nerdhalla Android $VERSION (signed build $BUILD)" \
+            --notes "Permanently signed APK for nerdhalla.net plus matching signed Google Play AAB." \
+            --latest
