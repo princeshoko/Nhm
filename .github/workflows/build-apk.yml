@@ -184,7 +184,7 @@ jobs:
         if: github.ref == 'refs/heads/main'
         shell: bash
         env:
-          GH_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ secrets.NERDHALLA_RELEASE_TOKEN || github.token }}
         run: |
           set -euo pipefail
           VERSION="$(python3 -c 'import json; print(json.load(open("apk-build.json"))["version"])')"
