@@ -176,7 +176,7 @@ jobs:
               "run_attempt": int(os.environ["GITHUB_RUN_ATTEMPT"]),
               "source_sha": os.environ["GITHUB_SHA"]
           }
-          Path("apk-build.json").write_text(json.dumps(metadata,indent=2)+"\\n")
+          Path("apk-build.json").write_text(json.dumps(metadata,indent=2)+"\n")
           print(json.dumps(metadata,indent=2))
           PY
 
