@@ -63,7 +63,7 @@ jobs:
           python3 - <<'PY'
           import hashlib,json,pathlib
           p=pathlib.Path('nerdhalla-latest.apk')
-          d={'build':291,'version':'2.5.41','build_type':'release','signing_cert_sha256':'a19dd27a5de82e5989d44c318e0a66b5ef2ea1e3fb43a76e90d49633f655eb35','sha256':hashlib.sha256(p.read_bytes()).hexdigest(),'size_bytes':p.stat().st_size,'source_sha':'4f2576319d023a3f7285afdeb89e297f683df03f'}
+          d={'build':291,'version':'2.5.41','build_type':'release','signing_cert_sha256':'a19dd27a5de82e5989d44c318e0a66b5ef2ea1e3fb43a76e90d49633f655eb35','sha256':hashlib.sha256(p.read_bytes()).hexdigest(),'size_bytes':p.stat().st_size,'source_sha':'4f2576319d023a3f7285afdeb89e297f683df03f','run_id':int(__import__('os').environ['GITHUB_RUN_ID']),'run_attempt':int(__import__('os').environ['GITHUB_RUN_ATTEMPT'])}
           pathlib.Path('apk-build.json').write_text(json.dumps(d,indent=2)+'\n')
           print(json.dumps(d,indent=2))
           PY
@@ -72,11 +72,12 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          if gh release view website-apk-291 >/dev/null 2>&1; then
-            echo "Release website-apk-291 already exists. Refusing to overwrite."
+          TAG="apk-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "Release $TAG already exists. Refusing to overwrite."
             exit 1
           fi
-          gh release create website-apk-291 nerdhalla-latest.apk apk-build.json \
+          gh release create "$TAG" nerdhalla-latest.apk apk-build.json \
             --repo "$GITHUB_REPOSITORY" \
             --target 4f2576319d023a3f7285afdeb89e297f683df03f \
             --title "Nerdhalla website APK 2.5.41 (build 291)" \
