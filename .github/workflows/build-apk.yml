@@ -148,8 +148,6 @@ jobs:
           path: app/build/outputs/bundle/release/app-release.aab
           if-no-files-found: error
 
-
-
       - name: Prepare website APK release metadata
         shell: bash
         run: |
