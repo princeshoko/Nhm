@@ -69,7 +69,7 @@ jobs:
           PY
       - name: Publish website APK release for Hydra sync
         env:
-          GH_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ secrets.NERDHALLA_RELEASE_TOKEN || github.token }}
         run: |
           set -euo pipefail
           TAG="apk-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
