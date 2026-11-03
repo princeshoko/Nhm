@@ -93,7 +93,7 @@ jobs:
           "$ANDROID_SDK_ROOT/build-tools/35.0.0/apksigner" verify --verbose --print-certs "$APK" > "$REPORT"
           grep -Eq '^Verified using v2 scheme .*: true$' "$REPORT"
           EXPECTED="a19dd27a5de82e5989d44c318e0a66b5ef2ea1e3fb43a76e90d49633f655eb35"
-          SIGNER="$(sed -nE 's/^Signer #1 certificate SHA-256 digest: ([a-fA-F0-9]{64})$/\\1/p' "$REPORT" | tr '[:upper:]' '[:lower:]')"
+          SIGNER="$(sed -nE 's/^Signer #1 certificate SHA-256 digest: ([a-fA-F0-9]{64})$/\1/p' "$REPORT" | tr '[:upper:]' '[:lower:]')"
           test "$SIGNER" = "$EXPECTED"
           "$ANDROID_SDK_ROOT/build-tools/35.0.0/aapt" dump badging "$APK" | grep -q "^package: name='net.nerdhalla.sharla' "
           echo "Signed website APK verified."
@@ -108,7 +108,7 @@ jobs:
           jarsigner -verify -certs "$AAB" | tee "$RUNNER_TEMP/aab-signature.txt"
           grep -q "jar verified." "$RUNNER_TEMP/aab-signature.txt"
           EXPECTED="a19dd27a5de82e5989d44c318e0a66b5ef2ea1e3fb43a76e90d49633f655eb35"
-          ACTUAL="$(keytool -printcert -jarfile "$AAB" 2>/dev/null | sed -nE 's/^[[:space:]]*SHA256: ([A-Fa-f0-9:]{95})$/\\1/p' | head -1 | tr -d ':' | tr '[:upper:]' '[:lower:]')"
+          ACTUAL="$(keytool -printcert -jarfile "$AAB" 2>/dev/null | sed -nE 's/^[[:space:]]*SHA256: ([A-Fa-f0-9:]{95})$/\1/p' | head -1 | tr -d ':' | tr '[:upper:]' '[:lower:]')"
           if [[ "$ACTUAL" != "$EXPECTED" ]]; then
             echo "::error::App Bundle signing certificate mismatch."
             exit 1
